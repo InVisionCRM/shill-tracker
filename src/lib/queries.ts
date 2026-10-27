@@ -1,6 +1,6 @@
 import { and, desc, eq, getTableColumns, ilike, inArray, or, sql } from "drizzle-orm"
 import { getDb } from "./db"
-import { influencerStats, influencers, mentions, posts, quotes } from "./db/schema"
+import { influencerStats, influencers, mentions, posts, pulseTokens, quotes } from "./db/schema"
 import { assetPartition, callRankWindow } from "./scoring/call-rank"
 import { downsample, type Candle } from "./scoring/evaluate"
 import type { PositionDTO, PricingProgress, ScoreSnapshot } from "./types"
@@ -531,6 +531,7 @@ export async function getFeed(limit = 40) {
       text: posts.text,
       username: influencers.username,
       name: influencers.name,
+      imageUrl: pulseTokens.imageUrl,
       profileImageUrl: influencers.profileImageUrl,
       followersCount: influencers.followersCount,
       influencerDemo: influencers.isDemo,
@@ -538,6 +539,7 @@ export async function getFeed(limit = 40) {
     .from(mentions)
     .innerJoin(posts, eq(posts.id, mentions.postId))
     .innerJoin(influencers, eq(influencers.id, mentions.influencerId))
+    .leftJoin(pulseTokens, sql`lower(${mentions.contractAddress}) = ${pulseTokens.address}`)
     .orderBy(desc(mentions.createdAt))
     .limit(limit)
 }

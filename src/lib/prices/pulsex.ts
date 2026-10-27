@@ -8,6 +8,12 @@ const ANCHOR_TS = 1_684_459_865
 const BLOCK_SECONDS = 10
 const GENESIS_TS = Math.floor(Date.parse("2023-05-13T00:00:00Z") / 1000)
 
+/** Rough PulseChain block for a unix timestamp. The RPC lookup still corrects it. */
+export function estimatePulseBlock(targetTs: number) {
+  if (targetTs < GENESIS_TS) return null
+  return ANCHOR_BLOCK + Math.round((targetTs - ANCHOR_TS) / BLOCK_SECONDS)
+}
+
 export const WPLS = "0xa1077a294dde1b09bb078844df40758a5d0f9a27"
 /** WPLS/USDC on PulseX. USDC is token0, 6 decimals. */
 export const WPLS_USDC_PAIR = "0x6753560538eca67617a9ce605178f788be7e524e"

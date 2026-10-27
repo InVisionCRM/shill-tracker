@@ -37,6 +37,16 @@ npm run db:migrate
 
 That command reads `DATABASE_URL_UNPOOLED` when it is set, and otherwise `DATABASE_URL`. The running app only needs `DATABASE_URL`, `INGEST_SECRET`, and `CRON_SECRET`. On Neon, put the direct URL (hostname without `-pooler`) in `DATABASE_URL_UNPOOLED` and the pooled URL in `DATABASE_URL`. A Vercel deploy runs the same migration from `vercel-build` before `next build`. `pnpm db:migrate` is the same script.
 
+## PulseChain directory
+
+Symbol ranking, logos, PulseX pair addresses, and the dead-token flag for PulseChain come from a local copy of Kyle's `screener_pairs` table. The app never opens that database. Copy it when you have the read-only URL:
+
+```bash
+SOURCE_DATABASE_URL="postgres://…" npm run import:pulsechain
+```
+
+The script only runs `SELECT` against `SOURCE_DATABASE_URL` and upserts into `DATABASE_URL` (or `DATABASE_URL_UNPOOLED` when that is set). It refuses to run if the two URLs point at the same database. Re-run it to refresh. Pairs that do not yet have a base token are skipped until a later copy fills them in. Curated overrides such as `$PDAI`, `$BEAR`, and `$HEX` still win over the directory.
+
 ## Environment
 
 | Variable | Required | Purpose |

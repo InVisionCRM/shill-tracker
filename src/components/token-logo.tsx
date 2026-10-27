@@ -16,15 +16,18 @@ const KNOWN: Record<string, string> = {
 export function TokenLogo({
   symbol,
   chain,
+  imageUrl,
   className,
 }: {
   symbol: string | null | undefined
   chain?: string | null
+  imageUrl?: string | null
   className?: string
 }) {
   const upper = symbol?.toUpperCase() ?? ""
   const pulse = chain === "pulsechain" ? pulseAsset(upper) : null
-  const src = pulse?.logo ?? (upper ? KNOWN[upper] : null)
+  const remote = imageUrl && (imageUrl.startsWith("https://") || imageUrl.startsWith("http://")) ? imageUrl : null
+  const src = remote ?? pulse?.logo ?? (upper ? KNOWN[upper] : null)
   const badge = chainShort(chain)
   return (
     <span className={cn("relative inline-flex size-8 shrink-0", className)}>

@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   doublePrecision,
   index,
@@ -224,6 +225,69 @@ export const apiCache = pgTable("api_cache", {
   payload: jsonb("payload").notNull(),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+})
+
+/** Copied PulseChain pairs. Filled by scripts/import-pulsechain-directory.ts, never by the app. */
+export const pulsePairs = pgTable(
+  "pulse_pairs",
+  {
+    pairAddress: text("pair_address").primaryKey(),
+    factory: text("factory"),
+    amm: text("amm"),
+    createdBlock: bigint("created_block", { mode: "number" }),
+    dexId: text("dex_id"),
+    label: text("label"),
+    baseAddress: text("base_address").notNull(),
+    baseSymbol: text("base_symbol"),
+    baseName: text("base_name"),
+    quoteAddress: text("quote_address"),
+    quoteSymbol: text("quote_symbol"),
+    imageUrl: text("image_url"),
+    priceUsd: doublePrecision("price_usd"),
+    marketCap: doublePrecision("market_cap"),
+    fdv: doublePrecision("fdv"),
+    liquidityUsd: doublePrecision("liquidity_usd"),
+    pairCreatedAt: timestamp("pair_created_at", { withTimezone: true }),
+    listed: boolean("listed"),
+    missingSince: timestamp("missing_since", { withTimezone: true }),
+    sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+    importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("pulse_pairs_base_idx").on(t.baseAddress),
+    index("pulse_pairs_symbol_idx").on(t.baseSymbol),
+  ],
+)
+
+/** One row per PulseChain base token, rolled up from pulse_pairs after each import. */
+export const pulseTokens = pgTable(
+  "pulse_tokens",
+  {
+    address: text("address").primaryKey(),
+    symbol: text("symbol"),
+    name: text("name"),
+    imageUrl: text("image_url"),
+    liquidityUsd: doublePrecision("liquidity_usd").notNull().default(0),
+    pairCount: integer("pair_count").notNull().default(0),
+    livePairCount: integer("live_pair_count").notNull().default(0),
+    bestPairAddress: text("best_pair_address"),
+    bestPairCreatedBlock: bigint("best_pair_created_block", { mode: "number" }),
+    pulsexPairAddress: text("pulsex_pair_address"),
+    pulsexCreatedBlock: bigint("pulsex_created_block", { mode: "number" }),
+    missingSince: timestamp("missing_since", { withTimezone: true }),
+    assetState: text("asset_state"),
+    sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+    importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("pulse_tokens_symbol_idx").on(t.symbol)],
+)
+
+export const pulseDirectory = pgTable("pulse_directory", {
+  id: integer("id").primaryKey(),
+  importedAt: timestamp("imported_at", { withTimezone: true }).notNull(),
+  sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+  pairCount: integer("pair_count").notNull().default(0),
+  tokenCount: integer("token_count").notNull().default(0),
 })
 
 export const cronRuns = pgTable("cron_runs", {

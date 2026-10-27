@@ -43,7 +43,11 @@ export default function MethodologyPage() {
           out of ROI. Only posts classified as calls are scored. Recaps, commentary, warnings, and jokes stay in the
           feed and are greyed out. A thin book stays low confidence and is badged in the UI. A PulseChain-focused
           voice resolves HEX, PLS, PLSX, INC, and PDAI to PulseChain pools instead of the same symbol on another
-          chain. HEX on every other voice is the Ethereum listing. The chain is shown next to the ticker.
+          chain. HEX on every other voice is the Ethereum listing. The chain is shown next to the ticker. A local
+          PulseChain directory, copied in with `npm run import:pulsechain`, ranks other PulseChain symbols by
+          liquidity, supplies logos, and picks the PulseX pair that existed at the post for reserve pricing. A
+          token whose pools are missing or have no liquidity is dead. The app does not connect to the source
+          database at runtime.
         </p>
       </section>
 

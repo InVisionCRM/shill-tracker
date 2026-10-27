@@ -29,6 +29,13 @@
       "when": 1793210000000,
       "tag": "0003_call_quality",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793230000000,
+      "tag": "0004_pulse_directory",
+      "breakpoints": true
     }
   ]
 }

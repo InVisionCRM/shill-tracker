@@ -15,6 +15,7 @@ import type { StoredBook } from "@/components/portfolio-panel"
 import { MentionTags, mentionMuted } from "@/components/mention-tags"
 import { countsTowardScore } from "@/lib/detect/kinds"
 import { chainLabel, formatCallDate, formatCompact, formatRoi, formatUsd, roiClass } from "@/lib/format"
+import { logosForSymbols } from "@/lib/pulsechain/lookup"
 import { getInfluencer, toPosition } from "@/lib/queries"
 import type { ScoreSnapshot } from "@/lib/types"
 
@@ -89,6 +90,9 @@ async function Profile({ params }: { params: Promise<{ username: string }> }) {
     : firstPack
   const shownFirst = data.firstCalls.slice(0, 40)
   const earliest = data.firstCalls[data.firstCalls.length - 1] ?? null
+  const logos = await logosForSymbols(
+    [...shownFirst.map((call) => call.symbol), earliest?.symbol].filter((symbol): symbol is string => Boolean(symbol)),
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -120,7 +124,12 @@ async function Profile({ params }: { params: Promise<{ username: string }> }) {
           <span>
             <span className="font-mono text-xs tracking-[0.16em] text-phosphor uppercase">Earliest first call</span>
             <span className="mt-1 flex items-center gap-2 text-lg font-medium">
-              <TokenLogo symbol={earliest.symbol} chain={earliest.chain} className="size-7" />
+              <TokenLogo
+                symbol={earliest.symbol}
+                chain={earliest.chain}
+                imageUrl={earliest.symbol ? logos.get(earliest.symbol.toUpperCase()) : null}
+                className="size-7"
+              />
               {earliest.symbol ? `$${earliest.symbol}` : "Unnamed"}
             </span>
             <span className="mt-1 block font-mono text-sm text-muted-foreground">{formatCallDate(earliest.createdAt)}</span>
@@ -158,7 +167,12 @@ async function Profile({ params }: { params: Promise<{ username: string }> }) {
                   className="flex flex-col gap-1 rounded-xl border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <span className="flex items-center gap-2">
-                    <TokenLogo symbol={call.symbol} chain={call.chain} className="size-8" />
+                    <TokenLogo
+                      symbol={call.symbol}
+                      chain={call.chain}
+                      imageUrl={call.symbol ? logos.get(call.symbol.toUpperCase()) : null}
+                      className="size-8"
+                    />
                     <span>
                       <span className="block font-mono">{call.symbol ? `$${call.symbol}` : "—"}</span>
                       <span className="block font-mono text-xs text-muted-foreground">{formatCallDate(call.createdAt)}</span>

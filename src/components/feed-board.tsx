@@ -75,7 +75,7 @@ export function FeedBoard({ initial, live = true }: { initial: FeedDTO[]; live?:
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
                   {item.symbol ? (
                     <Link href={`/tickers/${item.symbol}`} className="inline-flex items-center gap-1.5 font-mono text-phosphor hover:underline">
-                      <TokenLogo symbol={item.symbol} className="size-5" />
+                      <TokenLogo symbol={item.symbol} imageUrl={item.imageUrl} className="size-5" />
                       ${item.symbol}
                     </Link>
                   ) : (

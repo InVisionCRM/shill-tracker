@@ -67,13 +67,24 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
       : []
     const pendingOrder = new Map(pendingIds.map((id, index) => [id, index]))
     pending.sort((a, b) => (pendingOrder.get(a.id) ?? 0) - (pendingOrder.get(b.id) ?? 0))
+    const voiceIds = [...new Set(pending.map((mention) => mention.influencerId))]
+    const voices = voiceIds.length
+      ? await db
+          .select({ id: influencers.id, chainBias: influencers.chainBias })
+          .from(influencers)
+          .where(inArray(influencers.id, voiceIds))
+      : []
+    const biasOf = new Map(voices.map((voice) => [voice.id, voice.chainBias]))
 
     for (const mention of pending) {
       try {
+        const bias = biasOf.get(mention.influencerId) ?? null
+        const hint = mention.chain && mention.chain !== "unknown-evm" ? mention.chain : bias
         const curated = lookupOverride({
           symbol: mention.symbol,
           postedAt: mention.createdAt,
           chainHint: mention.chain,
+          chainBias: bias,
         })
         const resolved = curated
           ? {
@@ -94,9 +105,9 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
               assetState: null,
             }
           : mention.contractAddress
-            ? await resolveContract(mention.contractAddress, mention.chain)
+            ? await resolveContract(mention.contractAddress, hint)
             : mention.symbol
-              ? await resolveSymbol(mention.symbol, mention.chain)
+              ? await resolveSymbol(mention.symbol, hint)
               : null
         if (!resolved) continue
         const known = resolved.symbol ? canonicalBySymbol(resolved.symbol) : null

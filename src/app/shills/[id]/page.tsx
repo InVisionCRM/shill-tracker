@@ -13,6 +13,7 @@ import { OutcomeFlare } from "@/components/outcome-flare"
 import { TokenLogo } from "@/components/token-logo"
 import { MentionTags, mentionMuted } from "@/components/mention-tags"
 import { chainLabel, formatRoi, formatUsd, roiClass, shortAddress } from "@/lib/format"
+import { logosForAddresses, logosForSymbols } from "@/lib/pulsechain/lookup"
 import { getMention } from "@/lib/queries"
 
 export const metadata = { title: "Call" }
@@ -31,6 +32,12 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
   const data = await getMention(id)
   if (!data) notFound()
   const { mentions: mention, posts: post, influencers: voice, series } = data
+  const byAddress = mention.contractAddress ? await logosForAddresses([mention.contractAddress]) : new Map<string, string>()
+  const bySymbol = mention.symbol ? await logosForSymbols([mention.symbol]) : new Map<string, string>()
+  const imageUrl =
+    (mention.contractAddress ? byAddress.get(mention.contractAddress.toLowerCase()) : null) ??
+    (mention.symbol ? bySymbol.get(mention.symbol.toUpperCase()) : null) ??
+    null
   const horizons = [
     ["1h", mention.roi1h, mention.price1h],
     ["24h", mention.roi24h, mention.price24h],
@@ -43,7 +50,7 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
       <OutcomeFlare roi={mention.roi7d ?? mention.roiNow} />
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-3">
-          <TokenLogo symbol={mention.symbol} chain={mention.chain} className="size-12" />
+          <TokenLogo symbol={mention.symbol} chain={mention.chain} imageUrl={imageUrl} className="size-12" />
           <VoiceAvatar src={voice.profileImageUrl} username={voice.username} />
           <div>
             <p className="font-mono text-xs tracking-[0.18em] text-phosphor uppercase">Call</p>

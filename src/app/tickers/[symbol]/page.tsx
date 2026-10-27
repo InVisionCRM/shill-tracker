@@ -5,6 +5,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { TokenLogo } from "@/components/token-logo"
 import { TickerBoard } from "@/components/ticker-board"
 import { chainLabel, formatCallDate, formatUsd, shortAddress } from "@/lib/format"
+import { logosForAddresses, logosForSymbols } from "@/lib/pulsechain/lookup"
 import { getTicker } from "@/lib/queries"
 
 export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }) {
@@ -27,6 +28,13 @@ async function Ticker({ params }: { params: Promise<{ symbol: string }> }) {
   const earliest = firstCalls[0] ?? null
   const logoSymbol = earliest?.symbol ?? rows[0]?.mentions.symbol ?? query
   const logoChain = earliest?.chain ?? rows[0]?.mentions.chain
+  const logoContract = earliest?.contractAddress ?? rows[0]?.mentions.contractAddress
+  const byAddress = logoContract ? await logosForAddresses([logoContract]) : new Map<string, string>()
+  const bySymbol = logoSymbol ? await logosForSymbols([logoSymbol]) : new Map<string, string>()
+  const imageUrl =
+    (logoContract ? byAddress.get(logoContract.toLowerCase()) : null) ??
+    (logoSymbol ? bySymbol.get(logoSymbol.toUpperCase()) : null) ??
+    null
   const chains = [
     ...new Set(
       [...firstCalls.map((call) => call.chain), ...rows.map((row) => row.mentions.chain)].filter(
@@ -40,7 +48,7 @@ async function Ticker({ params }: { params: Promise<{ symbol: string }> }) {
       <header>
         <p className="font-mono text-xs tracking-[0.18em] text-phosphor uppercase">Ticker</p>
         <div className="mt-2 flex items-center gap-3">
-          <TokenLogo symbol={logoSymbol} chain={logoChain} className="size-12" />
+          <TokenLogo symbol={logoSymbol} chain={logoChain} imageUrl={imageUrl} className="size-12" />
           <h1 className="text-3xl font-semibold tracking-tight">
             {logoSymbol ? `$${logoSymbol}` : query}
           </h1>

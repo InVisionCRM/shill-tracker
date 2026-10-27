@@ -1,8 +1,11 @@
 import { and, eq, gt } from "drizzle-orm"
 import { CHAIN_TO_GECKOTERMINAL } from "../detect/assets"
+import { dexUrl } from "../detect/pulse"
 import { apiCache } from "../db/schema"
 import { getDb } from "../db"
 import { assetKeyOf } from "../format"
+import { pulsePairsFor, pulseSymbolCandidates } from "../pulsechain/lookup"
+import { pickPulsexPair, rankSymbolCandidates, tokenAssetState, type DirectoryPair } from "../pulsechain/rank"
 import { coingeckoConfig, fetchJson } from "./http"
 
 export type ResolvedAsset = {
@@ -208,6 +211,11 @@ function confidenceFromCaps(top: number, second: number | null): "high" | "mediu
 }
 
 export async function resolveSymbol(symbol: string, hintedChain?: string | null): Promise<ResolvedAsset> {
+  const hint = hintedChain && hintedChain !== "unknown-evm" ? canonicalChain(hintedChain) : null
+  if (hint === "pulsechain") {
+    const local = await resolveFromDirectory(symbol)
+    if (local) return local
+  }
   const cg = coingeckoConfig()
   const search = await cached(`cg-search:${symbol}`, 12 * 60 * 60 * 1000, () =>
     fetchJson<CgSearch>(`${cg.base}/search?query=${encodeURIComponent(symbol)}`, {
@@ -285,6 +293,9 @@ export async function resolveSymbol(symbol: string, hintedChain?: string | null)
 
 export async function resolveContract(address: string, _hintedChain?: string | null): Promise<ResolvedAsset> {
   const normalized = address.startsWith("0x") ? address.toLowerCase() : address
+  const hint = _hintedChain && _hintedChain !== "unknown-evm" ? canonicalChain(_hintedChain) ?? _hintedChain : null
+  const localPairs = normalized.startsWith("0x") ? await pulsePairsFor(normalized) : []
+  if (hint === "pulsechain" && localPairs.length) return assetFromLocalPairs(normalized, localPairs)
   let pairs = await loadDexPairs(normalized)
   const sawPulse = pairs.some((pair) => canonicalChain(pair.chainId) === "pulsechain")
   if (normalized.startsWith("0x") && !sawPulse) {
@@ -294,8 +305,83 @@ export async function resolveContract(address: string, _hintedChain?: string | n
       if (!pickEvmPair(pairs.filter((pair) => baseMatches(pair, normalized)))) throw error
     }
   }
-  const hint = _hintedChain && _hintedChain !== "unknown-evm" ? _hintedChain : null
+  const seen = new Set(pairs.map((pair) => pair.pairAddress?.toLowerCase()).filter(Boolean))
+  for (const extra of localDexPairs(localPairs)) {
+    const key = extra.pairAddress?.toLowerCase()
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    pairs.push(extra)
+  }
   return resolveEvmContract(normalized, pairs, hint)
+}
+
+async function resolveFromDirectory(symbol: string): Promise<ResolvedAsset | null> {
+  const candidates = await pulseSymbolCandidates(symbol)
+  if (!candidates.length) return null
+  const ranked = rankSymbolCandidates(candidates)
+  const best = ranked.best
+  if (!best) return null
+  const pair = best.pulsexPairAddress ?? best.pairAddress
+  return pack({
+    symbol: best.symbol,
+    assetName: best.name,
+    coingeckoId: null,
+    binanceSymbol: null,
+    chain: "pulsechain",
+    contractAddress: best.address,
+    pairAddress: pair,
+    dexscreenerUrl: pair ? dexUrl(pair) : null,
+    geckoterminalNetwork: "pulsechain",
+    confidence: ranked.confidence,
+    resolutionConfidence: ranked.resolutionConfidence,
+    assetState: best.assetState,
+    confidenceReason: ranked.reason,
+    resolutionStatus: "resolved",
+  })
+}
+
+function assetFromLocalPairs(address: string, pairs: DirectoryPair[]): ResolvedAsset {
+  const state = tokenAssetState(pairs)
+  const ranked = [...pairs].sort((a, b) => (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0))
+  const live = ranked.find((pair) => !pair.missingSince && (pair.liquidityUsd ?? 0) > 0) ?? ranked[0]
+  const pulsex = pickPulsexPair(pairs, null)
+  const pairAddress = pulsex?.pairAddress ?? live?.pairAddress ?? null
+  const liquidity = live && !live.missingSince ? (live.liquidityUsd ?? 0) : 0
+  const symbol = (live?.baseSymbol ?? pulsex?.baseSymbol ?? "").toUpperCase() || null
+  const confidence = liquidity >= 100_000 ? "high" : liquidity >= 20_000 ? "medium" : "low"
+  return pack({
+    symbol,
+    assetName: live?.baseName ?? null,
+    coingeckoId: null,
+    binanceSymbol: null,
+    chain: "pulsechain",
+    contractAddress: address,
+    pairAddress,
+    dexscreenerUrl: pairAddress ? dexUrl(pairAddress) : null,
+    geckoterminalNetwork: "pulsechain",
+    confidence,
+    resolutionConfidence: state === "dead" || confidence === "low" ? "low" : confidence,
+    assetState: state,
+    confidenceReason:
+      state === "dead"
+        ? "PulseChain directory has no pool with liquidity. The asset is dead. Price stays unverifiable and is never estimated."
+        : `${symbol ?? "Token"} on PulseChain from the local directory, ${formatCap(liquidity)} liquidity.`,
+    resolutionStatus: "resolved",
+  })
+}
+
+function localDexPairs(pairs: DirectoryPair[]): DexPair[] {
+  return pairs.map((pair) => ({
+    chainId: "pulsechain",
+    pairAddress: pair.pairAddress,
+    url: dexUrl(pair.pairAddress),
+    baseToken: {
+      address: pair.baseAddress,
+      symbol: pair.baseSymbol ?? undefined,
+      name: pair.baseName ?? undefined,
+    },
+    liquidity: { usd: pair.missingSince ? 0 : (pair.liquidityUsd ?? 0) },
+  }))
 }
 
 async function loadDexPairs(address: string) {

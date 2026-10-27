@@ -14,7 +14,8 @@
     "test": "vitest run",
     "verify:prices": "tsx scripts/verify-prices.ts",
     "smoke": "tsx scripts/smoke.ts",
-    "import": "tsx scripts/import-influencer.ts"
+    "import": "tsx scripts/import-influencer.ts",
+    "import:pulsechain": "tsx scripts/import-pulsechain-directory.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

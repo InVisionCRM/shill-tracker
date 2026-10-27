@@ -28,6 +28,7 @@ type FeedRow = {
   text: string
   username: string
   name: string
+  imageUrl?: string | null
   profileImageUrl: string | null
   followersCount: number
   influencerDemo: boolean

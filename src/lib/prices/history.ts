@@ -1,7 +1,9 @@
 import type { Candle } from "../scoring/evaluate"
 import { CHAIN_TO_GECKOTERMINAL } from "../detect/assets"
 import { coingeckoConfig, fetchJson } from "./http"
-import { fetchPulsexCandles, isUnverifiable, UnverifiablePriceError } from "./pulsex"
+import { pulsePairsFor } from "../pulsechain/lookup"
+import { pickPulsexPair } from "../pulsechain/rank"
+import { estimatePulseBlock, fetchPulsexCandles, isUnverifiable, UnverifiablePriceError } from "./pulsex"
 
 const DAY = 24 * 60 * 60 * 1000
 const GT_HISTORY_MS = 170 * DAY
@@ -81,11 +83,17 @@ export async function fetchHistory(
   } else if (network && target.pairAddress && olderThanGt) {
     errors.push("GeckoTerminal free OHLCV does not cover this date")
   }
-  if (target.chain === "pulsechain" && target.pairAddress && target.contractAddress) {
-    try {
+  if (target.chain === "pulsechain" && target.contractAddress) {
+    const localPairs = await pulsePairsFor(target.contractAddress)
+    const atBlock = estimatePulseBlock(Math.floor(postedAt / 1000))
+    const pulsex = pickPulsexPair(localPairs, atBlock)
+    const pair = pulsex?.pairAddress ?? target.pairAddress
+    if (!pair) {
+      errors.push("No PulseX pair in the local directory for this contract")
+    } else try {
       const candles = await fetchPulsexCandles({
         token: target.contractAddress,
-        pair: target.pairAddress,
+        pair,
         postedAt,
         fromMs,
         toMs,
