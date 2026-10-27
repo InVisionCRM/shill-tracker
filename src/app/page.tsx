@@ -1,76 +1,106 @@
-import { Suspense } from "react"
+import { cache, Suspense } from "react"
 import Link from "next/link"
 import { connection } from "next/server"
+import { HeroEffects, HeroMeters } from "@/components/hero-stage"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FeedBoard } from "@/components/feed-board"
 import { formatCompact, formatRoi, roiClass } from "@/lib/format"
-import { getFeed, getLeaderboard, getOverview } from "@/lib/queries"
+import { getFeed, getLeaderboard, getOverview, getTapeLogos } from "@/lib/queries"
 import { toFeed, toLeader } from "@/lib/serialize"
+
+const loadHome = cache(async () => {
+  await connection()
+  const [overview, feed, board, tape] = await Promise.all([
+    getOverview(),
+    getFeed(8),
+    getLeaderboard(),
+    getTapeLogos(),
+  ])
+  return { overview, feed, board, tape }
+})
 
 export const metadata = { title: "Tape" }
 
 export default function HomePage() {
   return (
-    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading the tape…</p>}>
-      <Home />
-    </Suspense>
+    <div className="flex flex-col gap-6">
+      <section className="relative overflow-hidden rounded-3xl border bg-card/50 px-4 py-6 sm:px-8 sm:py-8">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,color-mix(in_oklch,var(--phosphor)_16%,transparent),transparent_58%)]"
+        />
+        <HeroEffects />
+        <div className="relative z-10 flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
+            <p className="font-mono text-xs tracking-[0.18em] text-phosphor uppercase">Call archive</p>
+            <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">
+              Every post from the voices you track. Every ticker they touch. The price after they said it.
+            </h1>
+            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+              Live marks poll from public exchanges. Historical candles fill from the price queue, one day-cache at a time.
+            </p>
+          </div>
+          <Suspense
+            fallback={
+              <div className="grid grid-cols-2 gap-3" aria-hidden>
+                <div className="min-h-[4.75rem] rounded-2xl border bg-background/40" />
+                <div className="min-h-[4.75rem] rounded-2xl border bg-background/40" />
+              </div>
+            }
+          >
+            <HeroStats />
+          </Suspense>
+        </div>
+      </section>
+      <Suspense fallback={<div className="min-h-[100svh]" aria-hidden />}>
+        <HomeLists />
+      </Suspense>
+    </div>
   )
 }
 
-async function Home() {
-  await connection()
-  const [overview, feed, board] = await Promise.all([getOverview(), getFeed(8), getLeaderboard()])
+async function HeroStats() {
+  const { overview, tape } = await loadHome()
+  return (
+    <div className="flex flex-col gap-4">
+      {overview.voices === 0 && overview.shills === 0 ? (
+        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+          No voices yet. Add a handle, then POST posts to /api/ingest/posts. Prices fill from the queue after that.
+        </p>
+      ) : null}
+      {overview.demoVoices > 0 ? (
+        <Badge variant="outline" className="w-fit">
+          {overview.demoVoices} demo voices in the book
+        </Badge>
+      ) : null}
+      {overview.progress.phase === "first" ? (
+        <p className="font-mono text-xs text-muted-foreground">
+          Pricing first calls {overview.firstPriced.toLocaleString()} / {overview.firstTotal.toLocaleString()}
+        </p>
+      ) : overview.progress.phase === "repeat" ? (
+        <p className="font-mono text-xs text-muted-foreground">
+          Pricing repeats {overview.progress.priced.toLocaleString()} / {overview.progress.total.toLocaleString()}
+        </p>
+      ) : null}
+      <HeroMeters voices={overview.voices} shills={overview.shills} logos={tape.logos} logoSource={tape.source} />
+    </div>
+  )
+}
+
+async function HomeLists() {
+  const { overview, feed, board } = await loadHome()
   const leaders = board.map(toLeader)
   const ranked = [...leaders].sort((a, b) => (b.dumpRiskScore ?? -1) - (a.dumpRiskScore ?? -1))
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3">
-        <p className="font-mono text-xs tracking-[0.18em] text-phosphor uppercase">Call archive</p>
-        <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">
-          Every post from the voices you track. Every ticker they touch. The price after they said it.
-        </h1>
-        {overview.voices === 0 && overview.shills === 0 ? (
-          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-            No voices yet. Add a handle, then POST posts to /api/ingest/posts. Prices fill from the queue after that.
-          </p>
-        ) : overview.demoVoices > 0 ? (
-          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-            Demo voices are fictional and badged. Their charts are labeled SEED. The tape polls live marks from public exchanges.
-          </p>
-        ) : (
-          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-            Live marks poll from public exchanges. Historical candles fill from the price queue, one day-cache at a time.
-          </p>
-        )}
-        {overview.demoVoices > 0 ? (
-          <Badge variant="outline" className="w-fit">
-            {overview.demoVoices} demo voices in the book
-          </Badge>
-        ) : null}
-        {overview.progress.phase === "first" ? (
-          <p className="font-mono text-xs text-muted-foreground">
-            Pricing first calls {overview.firstPriced.toLocaleString()} / {overview.firstTotal.toLocaleString()}
-          </p>
-        ) : overview.progress.phase === "repeat" ? (
-          <p className="font-mono text-xs text-muted-foreground">
-            Pricing repeats {overview.progress.priced.toLocaleString()} / {overview.progress.total.toLocaleString()}
-          </p>
-        ) : null}
-      </section>
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Voices" value={formatCompact(overview.voices)} />
+      <section className="grid grid-cols-2 gap-3">
         <Stat label="Posts archived" value={formatCompact(overview.posts)} />
-        <Stat
-          label="Shills"
-          value={formatCompact(overview.shills)}
-          detail={`${overview.firstTotal.toLocaleString()} first calls`}
-        />
         <Stat
           label="Median 7d"
           value={formatRoi(overview.median7d)}
           className={roiClass(overview.median7d)}
-          detail={`${overview.flagged} first-call dump flags`}
+          detail={`${overview.flagged} first-call dump flags · ${overview.firstTotal.toLocaleString()} first calls`}
         />
       </section>
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">

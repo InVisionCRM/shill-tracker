@@ -162,6 +162,29 @@
   animation: marquee 42s linear infinite;
 }
 
+.marquee:hover .marquee-track,
+.marquee:focus-within .marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes spotlight-drift {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-42%) translateY(10px); }
+}
+
+.spotlight-drift {
+  animation: spotlight-drift 9s ease-in-out infinite;
+}
+
+.beam-path {
+  stroke-dasharray: 12 160;
+  animation: beam 7s linear infinite;
+}
+
+@keyframes beam {
+  to { stroke-dashoffset: -172; }
+}
+
 .glass-card {
   background: color-mix(in oklch, var(--card) 72%, transparent);
   border: 1px solid color-mix(in oklch, var(--foreground) 12%, transparent);
@@ -241,7 +264,11 @@
   .shimmer,
   .confetti-bit,
   .rug-shake,
-  .glass-card {
+  .glass-card,
+  .spotlight-drift,
+  .beam-path,
+  .timeline-item,
+  .rank-tick {
     animation: none;
     transform: none;
   }

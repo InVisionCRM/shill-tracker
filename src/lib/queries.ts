@@ -5,6 +5,44 @@ import { assetPartition, callRankWindow } from "./scoring/call-rank"
 import { downsample, type Candle } from "./scoring/evaluate"
 import type { PositionDTO, PricingProgress, ScoreSnapshot } from "./types"
 
+const PRICED_MARKETS: { symbol: string; chain: string | null; imageUrl: string | null }[] = [
+  { symbol: "BTC", chain: null, imageUrl: null },
+  { symbol: "ETH", chain: null, imageUrl: null },
+  { symbol: "SOL", chain: null, imageUrl: null },
+  { symbol: "HEX", chain: "pulsechain", imageUrl: null },
+  { symbol: "PEPE", chain: null, imageUrl: null },
+  { symbol: "DOGE", chain: null, imageUrl: null },
+  { symbol: "BONK", chain: null, imageUrl: null },
+  { symbol: "WIF", chain: null, imageUrl: null },
+]
+
+export async function getTapeLogos() {
+  const db = getDb()
+  const result = await db.execute(sql`
+    select symbol, chain, image_url
+    from (
+      select
+        upper(m.symbol) as symbol,
+        m.chain,
+        max(t.image_url) as image_url,
+        max(m.created_at) as seen
+      from mentions m
+      left join pulse_tokens t on upper(t.symbol) = upper(m.symbol)
+      where m.symbol is not null and char_length(m.symbol) between 2 and 12
+      group by 1, 2
+    ) logos
+    order by seen desc
+    limit 16
+  `)
+  const rows = resultRows<{ symbol: string; chain: string | null; image_url: string | null }>(result).map((row) => ({
+    symbol: row.symbol,
+    chain: row.chain,
+    imageUrl: row.image_url,
+  }))
+  if (rows.length > 0) return { source: "tape" as const, logos: rows }
+  return { source: "markets" as const, logos: PRICED_MARKETS }
+}
+
 export async function getOverview() {
   const db = getDb()
   const [counts] = await db

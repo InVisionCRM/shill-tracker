@@ -18,11 +18,13 @@ export function TokenLogo({
   chain,
   imageUrl,
   className,
+  loading,
 }: {
   symbol: string | null | undefined
   chain?: string | null
   imageUrl?: string | null
   className?: string
+  loading?: "eager" | "lazy"
 }) {
   const upper = symbol?.toUpperCase() ?? ""
   const pulse = chain === "pulsechain" ? pulseAsset(upper) : null
@@ -34,7 +36,13 @@ export function TokenLogo({
       {src ? (
         // Remote token art. Plain img avoids a remotePatterns allowlist.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" className="size-full rounded-full bg-card object-cover ring-1 ring-white/10" />
+        <img
+          src={src}
+          alt=""
+          loading={loading}
+          decoding="async"
+          className="size-full rounded-full bg-card object-cover ring-1 ring-white/10"
+        />
       ) : (
         <span
           className="flex size-full items-center justify-center rounded-full bg-gradient-to-br from-phosphor/80 to-chart-4/80 font-mono text-[10px] font-semibold text-primary-foreground"
