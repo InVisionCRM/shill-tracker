@@ -11,10 +11,12 @@ import { VoiceAvatar } from "@/components/voice-avatar"
 import { RoiHeatmap, TickerDonut } from "@/components/mix-charts"
 import { TokenLogo } from "@/components/token-logo"
 import { VoiceScores, type CallPeek, type ScorePack } from "@/components/voice-scores"
+import { StatBento } from "@/components/stat-bento"
+import { CallTimeline } from "@/components/call-timeline"
 import type { StoredBook } from "@/components/portfolio-panel"
 import { MentionTags, mentionMuted } from "@/components/mention-tags"
 import { countsTowardScore } from "@/lib/detect/kinds"
-import { chainLabel, formatCallDate, formatCompact, formatRoi, formatUsd, roiClass } from "@/lib/format"
+import { chainLabel, formatCallDate, formatCompact, formatRoi, formatUsd } from "@/lib/format"
 import { logosForSymbols } from "@/lib/pulsechain/lookup"
 import { getInfluencer, toPosition } from "@/lib/queries"
 import type { ScoreSnapshot } from "@/lib/types"
@@ -24,17 +26,23 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
   return { title: `@${username}` }
 }
 
-export default function InfluencerPage({ params }: { params: Promise<{ username: string }> }) {
+export default async function InfluencerPage({ params }: { params: Promise<{ username: string }> }) {
+  const { username } = await params
   return (
-    <Suspense fallback={<p className="text-sm text-muted-foreground">Opening the book…</p>}>
-      <Profile params={params} />
-    </Suspense>
+    <div className="flex flex-col gap-6">
+      <div>
+        <p className="font-mono text-xs tracking-[0.18em] text-phosphor uppercase">Voice</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">@{username}</h1>
+      </div>
+      <Suspense fallback={<div className="min-h-[100svh]" aria-hidden />}>
+        <Profile username={username} />
+      </Suspense>
+    </div>
   )
 }
 
-async function Profile({ params }: { params: Promise<{ username: string }> }) {
+async function Profile({ username }: { username: string }) {
   await connection()
-  const { username } = await params
   const data = await getInfluencer(username)
   if (!data) notFound()
   const { influencer, stats, mentions, posts } = data
@@ -101,9 +109,12 @@ async function Profile({ params }: { params: Promise<{ username: string }> }) {
           <VoiceAvatar src={influencer.profileImageUrl} username={influencer.username} className="size-16" />
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-3xl font-semibold tracking-tight">{influencer.name}</h1>
+              <p className="text-2xl font-semibold tracking-tight">{influencer.name}</p>
               {influencer.isDemo ? <Badge variant="outline">Demo</Badge> : <Badge>Tracked</Badge>}
               {!influencer.tracked ? <Badge variant="secondary">Not tracked</Badge> : null}
+              {(stats?.pumpDumpCount ?? 0) > 0 ? (
+                <Badge variant="destructive">Pump then dump</Badge>
+              ) : null}
             </div>
             <p className="font-mono text-sm text-muted-foreground">@{influencer.username}</p>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -115,6 +126,18 @@ async function Profile({ params }: { params: Promise<{ username: string }> }) {
         </div>
         {influencer.tracked ? <UntrackButton username={influencer.username} /> : null}
       </header>
+
+      <StatBento
+        followers={influencer.followersCount}
+        shills={stats?.shillCount ?? data.mentionTotal}
+        firstCalls={data.firstCalls.length}
+        credibility={stats?.credibilityScore ?? null}
+        dumpRisk={stats?.dumpRiskScore ?? null}
+        pumpDumpCount={stats?.pumpDumpCount ?? 0}
+        median7d={stats?.medianRoi7d ?? null}
+        win7d={stats?.winRate7d ?? null}
+        book7d={stats?.portfolio7d ?? null}
+      />
 
       {earliest ? (
         <Link
@@ -146,50 +169,7 @@ async function Profile({ params }: { params: Promise<{ username: string }> }) {
         repeats={data.repeats}
       />
 
-      <section className="flex flex-col gap-3">
-        <div>
-          <h2 className="text-xl font-semibold">First calls</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            One row per ticker. The date and the entry price are from the first time this voice named it.
-            {data.firstCalls.length > shownFirst.length
-              ? ` Showing ${shownFirst.length} of ${data.firstCalls.length}.`
-              : ""}
-          </p>
-        </div>
-        {shownFirst.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No ticker mentions yet.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {shownFirst.map((call) => (
-              <li key={call.id}>
-                <Link
-                  href={`/shills/${call.id}`}
-                  className="flex flex-col gap-1 rounded-xl border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <span className="flex items-center gap-2">
-                    <TokenLogo
-                      symbol={call.symbol}
-                      chain={call.chain}
-                      imageUrl={call.symbol ? logos.get(call.symbol.toUpperCase()) : null}
-                      className="size-8"
-                    />
-                    <span>
-                      <span className="block font-mono">{call.symbol ? `$${call.symbol}` : "—"}</span>
-                      <span className="block font-mono text-xs text-muted-foreground">{formatCallDate(call.createdAt)}</span>
-                    </span>
-                  </span>
-                  <span className="flex items-baseline justify-between gap-4 sm:block sm:text-right">
-                    <span className="block font-mono text-xl tabular-nums">{formatUsd(call.priceAt)}</span>
-                    <span className={`font-mono text-sm ${roiClass(call.roi7d ?? call.roi24h ?? call.roiNow)}`}>
-                      {formatRoi(call.roi7d ?? call.roi24h ?? call.roiNow)}
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <CallTimeline calls={shownFirst} logos={logos} total={data.firstCalls.length} />
 
       <section className="grid gap-4 lg:grid-cols-2">
         <Card className="glass-card">
