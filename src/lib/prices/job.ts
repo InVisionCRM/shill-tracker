@@ -78,6 +78,7 @@ export async function runPriceJob(options?: {
     rpcBatches: 0,
     durationMs: 0,
     stoppedBy: "done" as "done" | "budget",
+    outcomes: {} as Record<string, number>,
     phases: {} as Record<string, number>,
   }
   const phase = (name: string, since: number) => {
@@ -408,6 +409,7 @@ export async function runPriceJob(options?: {
       summary.assets = backlog.assets
       summary.onchainAssets = backlog.onchainAssets
       summary.fetches = backlog.fetches
+      summary.outcomes = { ...backlog.outcomes }
       for (const [source, count] of Object.entries(backlog.errorsBySource)) {
         summary.errorsBySource[source] = (summary.errorsBySource[source] ?? 0) + count
       }

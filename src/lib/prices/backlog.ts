@@ -153,6 +153,10 @@ export async function priceFromCache(options: {
     onchainAssets: 0,
     errorsBySource: {},
     touched: new Set<string>(),
+    outcomes: {},
+  }
+  const count = (key: string, n = 1) => {
+    stats.outcomes[key] = (stats.outcomes[key] ?? 0) + n
   }
   options.onStats?.(stats)
   const overBudget = () => Date.now() - options.startedAt > options.budgetMs
@@ -249,8 +253,10 @@ export async function priceFromCache(options: {
       try {
         candles = await onchainSeries({ token: job.token, net: job.net, pair: job.pair, times })
         stats.fetches += 1
+        count(candles.length ? "onchainSeries" : "onchainEmpty")
       } catch (error) {
         const message = noteError(error)
+        count(isUnverifiable(error) ? "onchainNoPool" : "onchainError")
         if (isUnverifiable(error)) {
           // No pool at all. Recent calls may still have API history; old ones stay unverifiable.
           const old = chunk.filter((row) => row.createdAt.getTime() < Date.now() - API_HISTORY_MS)
@@ -265,6 +271,7 @@ export async function priceFromCache(options: {
         const postedAt = row.createdAt.getTime()
         const slice = candles.filter((candle) => candle.t >= postedAt - 8 * DAY && candle.t <= Date.now() + HOUR)
         const ok = await write(row, slice, job.net === "ethereum" ? "uniswap-v2" : "pulsex")
+        count(ok ? "onchainPriced" : "onchainNoMatch")
         if (!ok) fallback.push(row)
       }
     }
@@ -291,6 +298,8 @@ export async function priceFromCache(options: {
   // cache it by day, then evaluate every call on that asset from the cache.
   const runApi = async ([assetKey, group]: [string, Row[]]) => {
     const sample = group[0]
+    count("apiAssets")
+    count(sample.binanceSymbol ? "apiBinance" : sample.coingeckoId ? "apiCoingecko" : sample.pairAddress ? "apiPool" : "apiNoSource")
     const needed = new Set<string>()
     for (const row of group) for (const day of windowDays(row.createdAt.getTime())) needed.add(day)
     const have = await cachedDays(assetKey, [...needed])
@@ -317,6 +326,7 @@ export async function priceFromCache(options: {
           { skipOnchain: true },
         )
         await storeDays(assetKey, gap, fetched.candles, fetched.source)
+        count(`apiFetch:${fetched.source}`)
         source = fetched.source
         for (const day of gap) have.add(day)
         stats.fetches += 1
@@ -337,7 +347,10 @@ export async function priceFromCache(options: {
       }
     }
     const ready = group.filter((row) => windowDays(row.createdAt.getTime()).every((day) => have.has(day)))
-    if (!ready.length) return
+    if (!ready.length) {
+      count("apiNotReady", group.length)
+      return
+    }
     const candles = await loadCandles(assetKey, [...have])
     if (!source) {
       const [stored] = await db
@@ -353,6 +366,7 @@ export async function priceFromCache(options: {
       const to = Math.min(Date.now(), postedAt + 30 * DAY) + 2 * HOUR
       const slice = candles.filter((candle) => candle.t >= postedAt - 8 * DAY && candle.t <= to)
       const ok = slice.length >= 2 && (await write(row, slice, source))
+      count(ok ? "apiPriced" : slice.length < 2 ? "apiThinCache" : "apiNoMatch")
       if (!ok) {
         stats.failed += 1
         const attempts = row.priceAttempts + 1
@@ -376,6 +390,7 @@ export async function priceFromCache(options: {
     }),
   )
 
+  count("apiAssetsLeft", apiQueue.length)
   return {
     ...stats,
     touched: [...stats.touched],
@@ -393,6 +408,8 @@ export type BacklogStats = {
   onchainAssets: number
   errorsBySource: Record<string, number>
   touched: Set<string>
+  /** Where each asset or row ended up this run (on-chain priced, API not ready, rate-limited, ...). */
+  outcomes: Record<string, number>
 }
 
 const ONCHAIN_CONCURRENCY = 3

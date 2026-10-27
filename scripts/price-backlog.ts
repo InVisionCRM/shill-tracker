@@ -57,7 +57,7 @@ async function main() {
     console.log(
       `pass ${pass} ${new Date().toISOString()} resolved=${result.resolved ?? 0} priced=${summary?.priced ?? 0} ` +
         `attempted=${summary?.attempted ?? 0} unverifiable=${summary?.unverifiable ?? 0} groupsLeft=${summary?.resolveGroupsPending ?? 0} ` +
-        `stop=${summary?.stoppedBy} ms=${summary?.durationMs} errors=${JSON.stringify(summary?.errorsBySource ?? {})} | ${line(lastProgress)}`,
+        `stop=${summary?.stoppedBy} ms=${summary?.durationMs} errors=${JSON.stringify(summary?.errorsBySource ?? {})} outcomes=${JSON.stringify((summary as { outcomes?: unknown } | undefined)?.outcomes ?? {})} phases=${JSON.stringify((summary as { phases?: unknown } | undefined)?.phases ?? {})} | ${line(lastProgress)}`,
     )
     const moved = Number(result.resolved ?? 0) + Number(summary?.priced ?? 0) + Number(summary?.unverifiable ?? 0)
     const idle = !summary?.attempted && !summary?.resolveGroups && !summary?.resolveGroupsPending
