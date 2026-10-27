@@ -33,12 +33,12 @@ export function AppFrame({
     <LiveProvider initialQuotes={quotes} initialLatest={latest}>
       <div className="flex min-h-full flex-col">
         <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur-md">
-          <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3">
-            <Link href="/" className="flex items-center gap-2">
+          <div className="mx-auto flex h-[52px] w-full max-w-6xl items-center gap-3 px-4">
+            <Link href="/" className="flex shrink-0 items-center gap-2">
               <span className="flex size-7 items-center justify-center rounded-md bg-phosphor font-mono text-xs font-bold text-primary-foreground">
                 S
               </span>
-              <span className="font-mono text-sm font-semibold tracking-[0.18em]">
+              <span className="whitespace-nowrap font-mono text-sm font-semibold tracking-[0.18em]">
                 <span className="text-phosphor">SHILL</span> TRACKER
               </span>
             </Link>
@@ -143,7 +143,7 @@ function NavFallback() {
 function LiveDot() {
   const { connected } = useLive()
   return (
-    <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] text-muted-foreground uppercase">
+    <span className="flex w-[4.75rem] items-center gap-1.5 whitespace-nowrap font-mono text-[10px] tracking-[0.14em] text-muted-foreground uppercase">
       <span className={`size-1.5 rounded-full ${connected ? "bg-gain" : "bg-warn"}`} />
       {connected ? "Live" : "Syncing"}
     </span>

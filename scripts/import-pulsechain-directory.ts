@@ -45,6 +45,13 @@ const SELECT_SQL = `
   limit $2
 `
 
+async function neonClient(): Promise<typeof Client> {
+  const { Client: NeonClient, neonConfig } = await import("@neondatabase/serverless")
+  const { default: ws } = await import("ws")
+  neonConfig.webSocketConstructor = ws
+  return NeonClient as unknown as typeof Client
+}
+
 async function main() {
   const sourceUrl = process.env.SOURCE_DATABASE_URL
   const destUrl = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL
@@ -58,8 +65,10 @@ async function main() {
     throw new Error("SOURCE_DATABASE_URL and the app database are the same. Refusing to write the seed.")
   }
 
-  const source = new Client({ connectionString: sourceUrl })
-  const dest = new Client({ connectionString: destUrl })
+  // DB_DRIVER=neon-ws talks to Neon over WebSocket on 443, for hosts that cannot reach port 5432.
+  const ClientImpl = process.env.DB_DRIVER === "neon-ws" ? await neonClient() : Client
+  const source = new ClientImpl({ connectionString: sourceUrl })
+  const dest = new ClientImpl({ connectionString: destUrl })
   await source.connect()
   await dest.connect()
   const started = new Date()
@@ -172,7 +181,7 @@ async function upsertPairs(dest: Client, rows: SourceRow[], importedAt: Date) {
       textOrNull(row.label),
       textOrNull(row.base_address)?.toLowerCase() ?? null,
       symbolOrNull(row.base_symbol),
-      textOrNull(row.base_name),
+      nameOrNull(row.base_name),
       textOrNull(row.quote_address)?.toLowerCase() ?? null,
       symbolOrNull(row.quote_symbol),
       textOrNull(row.image_url),
@@ -301,9 +310,15 @@ function textOrNull(value: unknown) {
   return trimmed ? trimmed : null
 }
 
+/** Spam tokens carry multi-kilobyte "symbols"; those are not tickers, and they break the btree index. */
 function symbolOrNull(value: unknown) {
   const text = textOrNull(value)
-  return text ? text.toUpperCase() : null
+  return text && text.length <= 32 ? text.toUpperCase() : null
+}
+
+function nameOrNull(value: unknown) {
+  const text = textOrNull(value)
+  return text ? text.slice(0, 200) : null
 }
 
 function numberOrNull(value: unknown) {

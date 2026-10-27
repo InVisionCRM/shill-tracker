@@ -55,7 +55,7 @@ export function Clock() {
     return () => window.clearInterval(timer)
   }, [])
   return (
-    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+    <span className="whitespace-nowrap font-mono text-xs tabular-nums text-muted-foreground">
       {now || "--:--:--"} UTC
     </span>
   )
