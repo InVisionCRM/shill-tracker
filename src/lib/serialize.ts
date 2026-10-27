@@ -21,6 +21,8 @@ type FeedRow = {
   pumpDumpScore: number | null
   priceStatus: string
   priceSource: string | null
+  priceMatch?: string | null
+  priceAtTs?: Date | null
   pinned: boolean
   isDemo: boolean
   createdAt: Date
@@ -35,7 +37,7 @@ type FeedRow = {
 }
 
 export function toFeed(row: FeedRow): FeedDTO {
-  return { ...row, createdAt: row.createdAt.toISOString() }
+  return { ...row, createdAt: row.createdAt.toISOString(), priceAtTs: row.priceAtTs ? row.priceAtTs.toISOString() : null }
 }
 
 type LeaderSource = {

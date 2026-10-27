@@ -2,6 +2,7 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { TokenLogo } from "@/components/token-logo"
 import { formatCallDate, formatRoi, formatUsd, roiClass } from "@/lib/format"
+import { PriceMatchNote } from "@/components/price-match-note"
 
 export type TimelineCall = {
   id: string
@@ -9,6 +10,8 @@ export type TimelineCall = {
   chain: string | null
   createdAt: Date
   priceAt: number | null
+  priceMatch?: string | null
+  priceAtTs?: Date | null
   roi7d: number | null
   roi24h: number | null
   roiNow: number | null
@@ -73,6 +76,7 @@ export function CallTimeline({
                 </span>
                 <span className="flex items-baseline justify-between gap-4 sm:block sm:text-right">
                   <span className="block font-mono text-xl tabular-nums">{formatUsd(call.priceAt)}</span>
+                  <PriceMatchNote match={call.priceMatch} at={call.priceAtTs} />
                   <span className={`font-mono text-sm ${roiClass(roi)}`}>{formatRoi(roi)}</span>
                 </span>
               </Link>

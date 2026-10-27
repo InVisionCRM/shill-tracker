@@ -29,6 +29,8 @@ export type FeedDTO = {
   pumpDumpScore: number | null
   priceStatus: string
   priceSource: string | null
+  priceMatch?: string | null
+  priceAtTs?: string | null
   pinned: boolean
   isDemo: boolean
   createdAt: string

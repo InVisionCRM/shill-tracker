@@ -15,6 +15,7 @@ import { MentionTags, mentionMuted } from "@/components/mention-tags"
 import { chainLabel, formatRoi, formatUsd, roiClass, shortAddress } from "@/lib/format"
 import { logosForAddresses, logosForSymbols } from "@/lib/pulsechain/lookup"
 import { getMention } from "@/lib/queries"
+import { PriceMatchNote } from "@/components/price-match-note"
 
 export const metadata = { title: "Call", description: "One call: the post, the price when it was made, and what the token did next." }
 
@@ -117,7 +118,10 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <dt className="text-xs text-muted-foreground">Entry</dt>
-                <dd className="font-mono">{formatUsd(mention.priceAt)}</dd>
+                <dd className="font-mono">
+                  {formatUsd(mention.priceAt)}
+                  <PriceMatchNote match={mention.priceMatch} at={mention.priceAtTs} className="mt-0.5" />
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Mark</dt>

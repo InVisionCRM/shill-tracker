@@ -12,6 +12,7 @@ import { MarkRoi } from "./mark"
 import { MentionTags, mentionMuted } from "./mention-tags"
 import { TokenLogo } from "./token-logo"
 import { VoiceAvatar } from "./voice-avatar"
+import { PriceMatchNote } from "@/components/price-match-note"
 
 export function FeedBoard({ initial, live = true }: { initial: FeedDTO[]; live?: boolean }) {
   const stream = useLive()
@@ -81,6 +82,9 @@ export function FeedBoard({ initial, live = true }: { initial: FeedDTO[]; live?:
                   ) : (
                     <span className="font-mono text-muted-foreground">{item.rawText}</span>
                   )}
+                  {item.priceMatch && item.priceMatch !== "exact" ? (
+                    <PriceMatchNote match={item.priceMatch} at={item.priceAtTs} className="w-auto" />
+                  ) : null}
                   <span className="text-muted-foreground">
                     24h <span className={roiClass(item.roi24h)}>{formatRoi(item.roi24h)}</span>
                   </span>

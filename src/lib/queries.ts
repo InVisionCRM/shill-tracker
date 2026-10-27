@@ -248,12 +248,12 @@ export async function getInfluencer(username: string) {
     select
       id, symbol, asset_name, asset_key, chain, created_at, price_at,
       roi_1h, roi_24h, roi_7d, roi_30d, roi_now,
-      pump_dump_flag, pinned, price_source, price_now
+      pump_dump_flag, pinned, price_source, price_now, price_match, price_at_ts
     from (
       select distinct on (${assetPartition})
         id, symbol, asset_name, asset_key, chain, created_at, price_at,
         roi_1h, roi_24h, roi_7d, roi_30d, roi_now,
-        pump_dump_flag, pinned, price_source, price_now
+        pump_dump_flag, pinned, price_source, price_now, price_match, price_at_ts
       from mentions
       where influencer_id = ${influencer.id}
         and call_kind = 'call'
@@ -323,6 +323,8 @@ type FirstCallRow = {
   pinned: boolean
   price_source: string | null
   price_now: number | null
+  price_match: string | null
+  price_at_ts: Date | string | null
 }
 
 function mapFirstCall(row: FirstCallRow) {
@@ -344,6 +346,8 @@ function mapFirstCall(row: FirstCallRow) {
     pinned: row.pinned,
     priceSource: row.price_source,
     priceNow: num(row.price_now),
+    priceMatch: row.price_match,
+    priceAtTs: row.price_at_ts == null ? null : row.price_at_ts instanceof Date ? row.price_at_ts : new Date(row.price_at_ts),
   }
 }
 
@@ -563,6 +567,8 @@ export async function getFeed(limit = 40) {
       pumpDumpScore: mentions.pumpDumpScore,
       priceStatus: mentions.priceStatus,
       priceSource: mentions.priceSource,
+      priceMatch: mentions.priceMatch,
+      priceAtTs: mentions.priceAtTs,
       pinned: mentions.pinned,
       isDemo: mentions.isDemo,
       createdAt: mentions.createdAt,
