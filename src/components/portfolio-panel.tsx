@@ -6,7 +6,7 @@ import type { HorizonKey } from "@/lib/format"
 import { HORIZONS, formatRoi, formatUsd, roiClass } from "@/lib/format"
 import type { PositionDTO } from "@/lib/types"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { EquityChart } from "./equity-chart"
+import { LazyEquityChart } from "./equity-chart-lazy"
 import { MarkRoi } from "./mark"
 import { AnimatedNumber } from "./animated-number"
 
@@ -40,7 +40,7 @@ export function PortfolioPanel({
           <p className="text-xs tracking-[0.16em] text-muted-foreground uppercase">
             $100 into every {noun}
           </p>
-          <p className="mt-1 font-mono text-3xl tabular-nums">
+          <p className="mt-1 h-9 font-mono text-3xl leading-9 tabular-nums">
             <AnimatedNumber value={exit} format={(value) => formatUsd(value)} />
           </p>
           <p className={`font-mono text-sm tabular-nums ${roiClass(settled ? (pnl ?? 0) / (settled * 100) : null)}`}>
@@ -65,7 +65,7 @@ export function PortfolioPanel({
           ))}
         </ToggleGroup>
       </div>
-      <EquityChart points={curve.points} />
+      <LazyEquityChart points={curve.points} />
       {stored ? (
         <p className="text-xs leading-5 text-muted-foreground">
           The dollar figure is the stored {noun} book. The curve plots the {positions.length} most recent stakes loaded

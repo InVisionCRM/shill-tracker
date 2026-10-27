@@ -1,6 +1,7 @@
 "use client"
 
 import { formatUsd } from "@/lib/format"
+import { CHART_BOX } from "./chart-box"
 
 export function EquityChart({
   points,
@@ -8,7 +9,11 @@ export function EquityChart({
   points: { t: number; equity: number; deployed: number }[]
 }) {
   if (points.length < 1) {
-    return <p className="text-sm text-muted-foreground">No closed prints for this hold yet.</p>
+    return (
+      <div className={CHART_BOX}>
+        <p className="text-sm text-muted-foreground">No closed prints for this hold yet.</p>
+      </div>
+    )
   }
   const w = 640
   const h = 160
@@ -25,12 +30,12 @@ export function EquityChart({
   const zero = y(0)
   const last = points[points.length - 1]
   return (
-    <div>
+    <div className={CHART_BOX}>
       <svg viewBox={`0 0 ${w} ${h}`} className="h-40 w-full" role="img" aria-label="Cumulative profit and loss">
         <line x1={pad} x2={w - pad} y1={zero} y2={zero} className="stroke-border" />
         <path d={d} fill="none" className={last.equity >= 0 ? "stroke-gain" : "stroke-loss"} strokeWidth="2.5" />
       </svg>
-      <p className="font-mono text-xs text-muted-foreground">
+      <p className="h-5 truncate font-mono text-xs leading-5 text-muted-foreground">
         {points.length} closed prints · deployed {formatUsd(last.deployed)} · P&L {formatUsd(last.equity)}
       </p>
     </div>

@@ -159,7 +159,8 @@ function PricingBar() {
       ? `Pricing repeats ${progress.priced.toLocaleString()} / ${progress.total.toLocaleString()}`
       : `Pricing first calls ${progress.firstPriced.toLocaleString()} / ${progress.firstTotal.toLocaleString()}`
   return (
-    <div className="border-t px-4 py-1.5">
+    // Overlays the top edge of the page instead of pushing it down when progress arrives (no layout shift).
+    <div className="pointer-events-none absolute inset-x-0 top-full border-y bg-background/95 px-4 py-1.5 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-3">
         <p className="shrink-0 font-mono text-[10px] tracking-wide text-muted-foreground uppercase">
           {label}
@@ -179,8 +180,8 @@ function Tape() {
     return <div className="h-9 border-t bg-card/40" />
   }
   return (
-    <div className="overflow-hidden border-t bg-card/40">
-      <div className="marquee-track flex w-max gap-6 py-2 pr-6">
+    <div className="h-9 overflow-hidden border-t bg-card/40">
+      <div className="marquee-track flex h-full w-max items-center gap-6 pr-6">
         {row.map((quote, index) => (
           <Link
             key={`${quote.assetKey}-${index}`}
