@@ -218,7 +218,7 @@ Authorization: Bearer $CRON_SECRET
 
 `/api/cron/scores` only recomputes aggregates. List queries omit the candle series so a voice with tens of thousands of mentions does not load that JSON.
 
-`vercel.json` schedules both jobs once a day (06:00 and 06:30 UTC), which is what Vercel Hobby allows. An external caller can hit the same routes with `CRON_SECRET` as often as you need to drain a backlog. The home tape shows `Pricing first calls X / Y` until those entry prices exist, then `Pricing repeats X / Y`. Repeats are priced only after every first call has an entry, or has been marked unavailable.
+`vercel.json` schedules both jobs once a day (06:00 and 06:30 UTC), which is what Vercel Hobby allows. That daily cron is the fallback. Between those runs, GitHub Actions hits the same routes on the budget below. The home tape shows `Pricing first calls X / Y` until those entry prices exist, then `Pricing repeats X / Y`. Repeats are priced only after every first call has an entry, or has been marked unavailable.
 
 Repeated tickers reuse `candle_days`. A day that was fetched and had no prints is stored empty so it is not requested again. GeckoTerminal returns at most 1000 hourly candles per call, so a multi-year HEX history continues across runs.
 
@@ -252,6 +252,16 @@ The in-app method page (`/methodology`) is the formula, and it renders the same 
 
 ## Deploy
 
-Deploy the Next.js app on Vercel with the env vars above. Set `DATABASE_URL` to the Neon **pooled** URL and `DATABASE_URL_UNPOOLED` to the direct URL. The `vercel-build` script migrates with the unpooled URL (or `DATABASE_URL` if that is all you have) and then runs `next build`. It never seeds. Leave `SEED_DEMO` unset in production. The app prices from public Binance, CoinGecko, DexScreener, GeckoTerminal, and PulseChain RPC endpoints. `COINGECKO_API_KEY` is optional. Cron in `vercel.json` is daily.
+Deploy the Next.js app on Vercel with the env vars above. The public URL is the free `*.vercel.app` host. Set `DATABASE_URL` to the Neon **pooled** URL and `DATABASE_URL_UNPOOLED` to the direct URL. The `vercel-build` script migrates with the unpooled URL (or `DATABASE_URL` if that is all you have) and then runs `next build`. It never seeds. Leave `SEED_DEMO` unset in production. The app prices from public Binance, CoinGecko, DexScreener, GeckoTerminal, and PulseChain RPC endpoints. `COINGECKO_API_KEY` is optional. Cron in `vercel.json` is daily, and GitHub Actions drains the queue between those runs.
 
-`.github/workflows/cron.yml` calls the same routes from GitHub Actions: prices at 06:00 UTC and scores at 06:30 UTC. Repository secrets `APP_URL` (deployment origin, no path) and `CRON_SECRET` (the same value as the app) are only for that workflow. The app itself does not read `APP_URL`.
+## GitHub Actions minutes
+
+A private repository includes 2,000 GitHub Actions minutes a month. `ubuntu-latest` bills at 1×, and every job costs at least 1 minute even when the steps finish in a few seconds. A job that runs 70 seconds costs 2 minutes. The cap below assumes each cron tick stays under 60 seconds and therefore bills as 1.
+
+`.github/workflows/cron.yml` is one workflow and one job. The schedule is `*/30 * * * *`: 48 runs a day, about 1,440 runs in a 30-day month (1,488 in a 31-day month). There is no matrix and no second job. The runner is `ubuntu-latest` with `timeout-minutes: 2`. The job does not check out the repo, does not set up Node, and does not use a cache. It only runs `curl`. Concurrency group `cron-tick` with `cancel-in-progress: false` queues the next tick instead of starting a second one.
+
+Each run calls `POST /api/cron/prices` (curl gives up after 40 seconds). It calls `POST /api/cron/scores` only on the hourly slot, when the job starts in an even 30-minute bucket of the Unix epoch, which is :00–:29 UTC, and also on a manual `workflow_dispatch`. The scores request gives up after 15 seconds. Those two caps keep a healthy tick under one billed minute. At that rate the schedule spends about 1,440 minutes and leaves about 560 for everything else. The daily Vercel cron is what finishes a tick that Actions cuts off.
+
+Repository secrets for that workflow only: `APP_URL` (the `*.vercel.app` origin, no path) and `CRON_SECRET` (the same value as the app). The app does not read `APP_URL`.
+
+`.github/workflows/ci.yml` is the other consumer of those leftover minutes. It runs on pull requests and on pushes to `main`, and it skips a run whose changes are only markdown or files under `docs/`. One job, no matrix, `timeout-minutes: 5`. It caches the pnpm store (`actions/setup-node` with `cache: pnpm`, because this repo commits `pnpm-lock.yaml` and the npm cache looks for `package-lock.json`), then runs lint, `tsc --noEmit`, and unit tests. It does not run `next build`. Vercel already builds previews. A cached run should bill 1–2 minutes; the 5-minute timeout is the worst case for a single run.

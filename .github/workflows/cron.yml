@@ -2,32 +2,37 @@ name: Cron
 
 on:
   schedule:
-    - cron: "0 6 * * *"
-    - cron: "30 6 * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
+
+concurrency:
+  group: cron-tick
+  cancel-in-progress: false
+
+permissions: {}
 
 jobs:
   tick:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
-      - name: Price queue
-        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 6 * * *'
+      - name: Price queue, and scores on the hour
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          test -n "$APP_URL" && test -n "$CRON_SECRET"
-          curl --fail-with-body -sS -X POST \
+          set -eu
+          test -n "$APP_URL"
+          test -n "$CRON_SECRET"
+          base="${APP_URL%/}"
+          curl --fail-with-body -sS --max-time 40 -X POST \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${APP_URL%/}/api/cron/prices"
-
-      - name: Recompute scores
-        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 6 * * *'
-        env:
-          APP_URL: ${{ secrets.APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          test -n "$APP_URL" && test -n "$CRON_SECRET"
-          curl --fail-with-body -sS -X POST \
-            -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${APP_URL%/}/api/cron/scores"
+            "${base}/api/cron/prices"
+          # Even 30-minute buckets of the Unix epoch are the :00 UTC hour.
+          # A manual run always refreshes scores. Half-hour schedule ticks do not.
+          bucket=$(( $(date -u +%s) / 1800 ))
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ $((bucket % 2)) -eq 0 ]; then
+            curl --fail-with-body -sS --max-time 15 -X POST \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              "${base}/api/cron/scores"
+          fi
