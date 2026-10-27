@@ -60,7 +60,7 @@ export function VoiceScores({
           {mode === "first"
             ? "ROI, win rate, the $100 book, and dump flags use the first mention of each ticker."
             : "Those scores include every mention. Shill count stays the total."}{" "}
-          {shillCount.toLocaleString()} shills · {repeatAssets.toLocaleString()} repeat tickers.
+          {shillCount.toLocaleString("en-US")} shills · {repeatAssets.toLocaleString("en-US")} repeat tickers.
         </p>
       </div>
 

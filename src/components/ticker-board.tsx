@@ -65,7 +65,7 @@ export function TickerBoard({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <ScopeToggle value={mode} onChange={setMode} />
         <p className="text-xs text-muted-foreground">
-          {total.toLocaleString()} mentions · {firstCalls.length.toLocaleString()} voices
+          {total.toLocaleString("en-US")} mentions · {firstCalls.length.toLocaleString("en-US")} voices
         </p>
       </div>
       <section className="grid gap-3 sm:grid-cols-2">

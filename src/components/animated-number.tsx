@@ -62,10 +62,17 @@ export function Clock() {
 }
 
 export function RelativeTime({ iso }: { iso: string }) {
-  const [label, setLabel] = useState(formatRelative(iso))
+  // Server HTML and the first client render show the same fixed UTC date; "5m ago" only after mount,
+  // because the server's clock and the browser's differ (React #418 otherwise).
+  const [label, setLabel] = useState(() => formatAbsolute(iso))
   useEffect(() => {
-    const timer = window.setInterval(() => setLabel(formatRelative(iso)), 30_000)
-    return () => window.clearInterval(timer)
+    const update = () => setLabel(formatRelative(iso))
+    const first = window.setTimeout(update, 0)
+    const timer = window.setInterval(update, 30_000)
+    return () => {
+      window.clearTimeout(first)
+      window.clearInterval(timer)
+    }
   }, [iso])
   return (
     <time dateTime={iso} className="font-mono text-xs text-muted-foreground tabular-nums">
@@ -83,7 +90,11 @@ function formatRelative(iso: string) {
   if (delta < hour) return `${Math.floor(delta / minute)}m ago`
   if (delta < day) return `${Math.floor(delta / hour)}h ago`
   if (delta < 30 * day) return `${Math.floor(delta / day)}d ago`
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(
+  return formatAbsolute(iso)
+}
+
+function formatAbsolute(iso: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(
     new Date(iso),
   )
 }

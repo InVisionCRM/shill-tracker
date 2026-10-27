@@ -156,8 +156,8 @@ function PricingBar() {
   const width = Math.max(4, Math.round((progress.priced / Math.max(progress.total, 1)) * 100))
   const label =
     progress.phase === "repeat"
-      ? `Pricing repeats ${progress.priced.toLocaleString()} / ${progress.total.toLocaleString()}`
-      : `Pricing first calls ${progress.firstPriced.toLocaleString()} / ${progress.firstTotal.toLocaleString()}`
+      ? `Pricing repeats ${progress.priced.toLocaleString("en-US")} / ${progress.total.toLocaleString("en-US")}`
+      : `Pricing first calls ${progress.firstPriced.toLocaleString("en-US")} / ${progress.firstTotal.toLocaleString("en-US")}`
   return (
     // Overlays the top edge of the page instead of pushing it down when progress arrives (no layout shift).
     <div className="pointer-events-none absolute inset-x-0 top-full border-y bg-background/95 px-4 py-1.5 backdrop-blur">

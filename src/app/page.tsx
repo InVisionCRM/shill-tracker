@@ -76,11 +76,11 @@ async function HeroStats() {
       ) : null}
       {overview.progress.phase === "first" ? (
         <p className="font-mono text-xs text-muted-foreground">
-          Pricing first calls {overview.firstPriced.toLocaleString()} / {overview.firstTotal.toLocaleString()}
+          Pricing first calls {overview.firstPriced.toLocaleString("en-US")} / {overview.firstTotal.toLocaleString("en-US")}
         </p>
       ) : overview.progress.phase === "repeat" ? (
         <p className="font-mono text-xs text-muted-foreground">
-          Pricing repeats {overview.progress.priced.toLocaleString()} / {overview.progress.total.toLocaleString()}
+          Pricing repeats {overview.progress.priced.toLocaleString("en-US")} / {overview.progress.total.toLocaleString("en-US")}
         </p>
       ) : null}
       <HeroMeters voices={overview.voices} shills={overview.shills} logos={tape.logos} logoSource={tape.source} />
@@ -100,7 +100,7 @@ async function HomeLists() {
           label="Median 7d"
           value={formatRoi(overview.median7d)}
           className={roiClass(overview.median7d)}
-          detail={`${overview.flagged} first-call dump flags · ${overview.firstTotal.toLocaleString()} first calls`}
+          detail={`${overview.flagged} first-call dump flags · ${overview.firstTotal.toLocaleString("en-US")} first calls`}
         />
       </section>
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">

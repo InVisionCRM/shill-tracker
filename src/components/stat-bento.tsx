@@ -80,7 +80,7 @@ export function StatBento({
           <CardTitle className="font-mono text-3xl tabular-nums">{formatCompact(shills)}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-xs text-muted-foreground">{firstCalls.toLocaleString()} first calls</p>
+          <p className="text-xs text-muted-foreground">{firstCalls.toLocaleString("en-US")} first calls</p>
         </CardContent>
       </Card>
       <Card className="glass-card">
