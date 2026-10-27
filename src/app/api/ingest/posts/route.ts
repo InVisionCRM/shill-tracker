@@ -22,9 +22,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await ingestPosts(parsed.value)
+    const defer = ["1", "true"].includes(new URL(request.url).searchParams.get("defer_pricing") ?? "")
+    const result = await ingestPosts(parsed.value, { deferPricing: defer })
     let pricing: unknown = null
-    if (result.mention_ids.length) {
+    if (!defer && result.mention_ids.length) {
       try {
         pricing = await runPriceJob({ limit: 3, mentionIds: result.mention_ids })
       } catch (error) {

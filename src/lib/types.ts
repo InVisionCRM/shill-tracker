@@ -64,6 +64,13 @@ export type LeaderRow = {
   credibilityHorizon: string | null
   sampleSize: number
   repeatAssets: number
+  sparkline?: number[]
+}
+
+export type PricingProgress = {
+  priced: number
+  total: number
+  pending: number
 }
 
 export type PositionDTO = {

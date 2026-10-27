@@ -1,4 +1,5 @@
 import { CASHTAG_DENY, NAME_TO_SYMBOL, canonicalBySymbol } from "./assets"
+import { dexUrl, pulseAsset } from "./pulse"
 
 export type MatchType = "cashtag" | "name" | "evm" | "solana"
 
@@ -35,7 +36,7 @@ function looksLikeSolanaAddress(value: string) {
   return true
 }
 
-export function extractMatches(text: string): RawMatch[] {
+export function extractMatches(text: string, extraNames?: Record<string, string>): RawMatch[] {
   const matches: RawMatch[] = []
   const seen = new Set<string>()
 
@@ -67,6 +68,28 @@ export function extractMatches(text: string): RawMatch[] {
       contractAddress: null,
       matchKey: `name:${symbol}`,
     })
+  }
+
+  const aliasKeys = Object.keys(extraNames ?? {}).filter((key) => key && !NAME_TO_SYMBOL[key])
+  if (aliasKeys.length && extraNames) {
+    const aliasPattern = new RegExp(
+      `\\b(?:${aliasKeys
+        .sort((a, b) => b.length - a.length)
+        .map(escapeRegExp)
+        .join("|")})\\b`,
+      "gi",
+    )
+    for (const hit of text.matchAll(aliasPattern)) {
+      const symbol = extraNames[hit[0].toLowerCase()]?.toUpperCase()
+      if (!symbol) continue
+      push({
+        matchType: "name",
+        rawText: hit[0],
+        symbol,
+        contractAddress: null,
+        matchKey: `name:${symbol}`,
+      })
+    }
   }
 
   const evmSpans: { start: number; end: number }[] = []
@@ -108,12 +131,40 @@ export type IdentifiedMatch = RawMatch & {
   coingeckoId: string | null
   binanceSymbol: string | null
   chain?: string | null
+  pairAddress?: string | null
+  dexscreenerUrl?: string | null
+  geckoterminalNetwork?: string | null
   confidence: "high" | "medium" | "low"
   confidenceReason: string
   resolutionStatus: "pending" | "resolved"
 }
 
-export function identifyFast(match: RawMatch): IdentifiedMatch {
+export function identifyFast(
+  match: RawMatch,
+  options?: { chainBias?: string | null } | number,
+): IdentifiedMatch {
+  const chainBias = typeof options === "number" ? null : options?.chainBias
+  if (chainBias === "pulsechain" && match.symbol) {
+    const pulse = pulseAsset(match.symbol)
+    if (pulse) {
+      return {
+        ...match,
+        symbol: pulse.symbol,
+        assetName: pulse.name,
+        coingeckoId: null,
+        binanceSymbol: null,
+        chain: "pulsechain",
+        contractAddress: pulse.contract,
+        pairAddress: pulse.pair,
+        geckoterminalNetwork: "pulsechain",
+        dexscreenerUrl: dexUrl(pulse.pair),
+        confidence: "high",
+        confidenceReason: pulse.reason,
+        resolutionStatus: "resolved",
+      }
+    }
+  }
+
   if (match.symbol) {
     const known = canonicalBySymbol(match.symbol)
     if (known) {

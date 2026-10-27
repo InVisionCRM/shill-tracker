@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm"
 import { collapseMatches, extractMatches, identifyFast } from "./detect/extract"
+import { VOICE_PRESETS } from "./detect/pulse"
 import { getDb } from "./db"
 import { influencers, mentions, posts } from "./db/schema"
 import { assetKeyOf, postUrl } from "./format"
@@ -113,7 +114,7 @@ export type IngestPayload = {
   }[]
 }
 
-export async function ingestPosts(input: IngestPayload) {
+export async function ingestPosts(input: IngestPayload, options?: { deferPricing?: boolean }) {
   const db = getDb()
   const now = new Date()
   let created = false
@@ -134,6 +135,7 @@ export async function ingestPosts(input: IngestPayload) {
     throw new Error(`username @${input.user.username} is already linked to a different X user id`)
   }
 
+  const preset = VOICE_PRESETS[input.user.username]
   if (!influencer) {
     const inserted = await db
       .insert(influencers)
@@ -148,6 +150,8 @@ export async function ingestPosts(input: IngestPayload) {
         listedCount: input.user.listedCount,
         tracked: true,
         isDemo: false,
+        chainBias: preset?.chainBias ?? null,
+        aliases: preset?.aliases ?? {},
         updatedAt: now,
       })
       .returning()
@@ -166,6 +170,11 @@ export async function ingestPosts(input: IngestPayload) {
         tweetCount: input.user.tweetCount || influencer.tweetCount,
         listedCount: input.user.listedCount || influencer.listedCount,
         tracked: true,
+        chainBias: influencer.chainBias ?? preset?.chainBias ?? null,
+        aliases:
+          influencer.aliases && Object.keys(influencer.aliases).length
+            ? influencer.aliases
+            : (preset?.aliases ?? influencer.aliases),
         updatedAt: now,
       })
       .where(eq(influencers.id, influencer.id))
@@ -229,7 +238,12 @@ export async function ingestPosts(input: IngestPayload) {
       await db.delete(mentions).where(eq(mentions.postId, post.id))
     }
 
-    const identified = collapseMatches(extractMatches(post.text).map(identifyFast))
+    const aliases = { ...(preset?.aliases ?? {}), ...(influencer.aliases ?? {}) }
+    const identified = collapseMatches(
+      extractMatches(post.text, aliases).map((match) =>
+        identifyFast(match, { chainBias: influencer.chainBias }),
+      ),
+    )
     for (const match of identified) {
       const inserted = await db
         .insert(mentions)
@@ -245,7 +259,12 @@ export async function ingestPosts(input: IngestPayload) {
           coingeckoId: match.coingeckoId,
           binanceSymbol: match.binanceSymbol,
           contractAddress: match.contractAddress,
-          chain: match.matchType === "solana" ? "solana" : match.matchType === "evm" ? "ethereum" : null,
+          pairAddress: match.pairAddress ?? null,
+          dexscreenerUrl: match.dexscreenerUrl ?? null,
+          geckoterminalNetwork: match.geckoterminalNetwork ?? null,
+          chain:
+            match.chain ??
+            (match.matchType === "solana" ? "solana" : match.matchType === "evm" ? "ethereum" : null),
           confidence: match.confidence,
           confidenceReason: match.confidenceReason,
           resolutionStatus: match.resolutionStatus,
@@ -265,7 +284,7 @@ export async function ingestPosts(input: IngestPayload) {
     .set({ latestPostId: latest, updatedAt: now })
     .where(eq(influencers.id, influencer.id))
 
-  await recomputeInfluencers([influencer.id])
+  if (!options?.deferPricing) await recomputeInfluencers([influencer.id])
 
   return {
     user: {

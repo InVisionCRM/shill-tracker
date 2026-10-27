@@ -35,7 +35,9 @@ export default function MethodologyPage() {
           Everything else waits for CoinGecko search plus market cap, then DexScreener liquidity. The biggest market
           cap wins. Confidence is high when the leader is at least 5× the runner-up and above $5M, medium when the
           lead is at least 2× and above $1M, and low when the field is crowded. Contracts take the DexScreener pair
-          with the most liquidity. A thin book stays low confidence and is badged in the UI.
+          with the most liquidity. A thin book stays low confidence and is badged in the UI. A PulseChain-focused
+          voice resolves HEX, PLS, PLSX, INC, and PDAI to PulseChain pools instead of the same symbol on another
+          chain. HEX on every other voice is the Ethereum listing. The chain is shown next to the ticker.
         </p>
       </section>
 

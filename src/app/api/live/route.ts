@@ -1,6 +1,6 @@
 import { connection } from "next/server"
 import { ensureFreshQuotes } from "@/lib/prices/job"
-import { getFeed, getQuotes } from "@/lib/queries"
+import { getFeed, getPricingProgress, getQuotes } from "@/lib/queries"
 
 export async function GET() {
   await connection()
@@ -9,9 +9,10 @@ export async function GET() {
   } catch {
     // Stale quotes still render. The next poll retries.
   }
-  const [quotes, latest] = await Promise.all([getQuotes(), getFeed(30)])
+  const [quotes, latest, progress] = await Promise.all([getQuotes(), getFeed(30), getPricingProgress()])
   return Response.json({
     now: new Date().toISOString(),
+    progress,
     quotes: quotes.map((quote) => ({
       assetKey: quote.assetKey,
       symbol: quote.symbol,

@@ -10,7 +10,9 @@ import { PostText } from "@/components/post-text"
 import { RelativeTime } from "@/components/animated-number"
 import { UntrackButton } from "@/components/voice-actions"
 import { VoiceAvatar } from "@/components/voice-avatar"
-import { formatCompact, formatRoi, roiClass } from "@/lib/format"
+import { RoiHeatmap, TickerDonut } from "@/components/mix-charts"
+import { TokenLogo } from "@/components/token-logo"
+import { chainLabel, formatCompact, formatRoi, roiClass } from "@/lib/format"
 import { getInfluencer } from "@/lib/queries"
 import type { PositionDTO } from "@/lib/types"
 
@@ -72,8 +74,9 @@ async function Profile({ params }: { params: Promise<{ username: string }> }) {
             </div>
             <p className="font-mono text-sm text-muted-foreground">@{influencer.username}</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {formatCompact(influencer.followersCount)} followers · {stats?.postCount ?? posts.length} posts ·{" "}
-              {stats?.shillCount ?? mentions.length} shills
+              {formatCompact(influencer.followersCount)} followers · {stats?.postCount ?? data.postTotal} posts ·{" "}
+              {stats?.shillCount ?? data.mentionTotal} shills
+              {influencer.chainBias ? ` · ${chainLabel(influencer.chainBias)} bias` : ""}
             </p>
           </div>
         </div>
@@ -115,6 +118,27 @@ async function Profile({ params }: { params: Promise<{ username: string }> }) {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
+        <Card className="glass-card">
+          <CardHeader>
+            <CardTitle>Most shilled</CardTitle>
+            <CardDescription>Share of calls, with the chain when the same symbol exists on more than one.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TickerDonut slices={data.mix} />
+          </CardContent>
+        </Card>
+        <Card className="glass-card">
+          <CardHeader>
+            <CardTitle>7 day returns by week</CardTitle>
+            <CardDescription>Green weeks made money. Red weeks did not.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RoiHeatmap weeks={data.weeks} />
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>If you bought every call</CardTitle>
@@ -140,8 +164,8 @@ async function Profile({ params }: { params: Promise<{ username: string }> }) {
                 <ul className="mt-2 flex flex-col gap-2">
                   {repeats.map((group) => (
                     <li key={group.key} className="flex items-center justify-between text-sm">
-                      <Link href={`/tickers/${group.symbol}`} className="font-mono text-phosphor hover:underline">
-                        ${group.symbol} · {group.count} times
+                      <Link href={`/tickers/${group.symbol}`} className="inline-flex items-center gap-2 font-mono text-phosphor hover:underline">
+                        <TokenLogo symbol={group.symbol} className="size-5" />${group.symbol} · {group.count} times
                       </Link>
                       <span className={roiClass(group.avg)}>{formatRoi(group.avg)}</span>
                     </li>
@@ -155,6 +179,11 @@ async function Profile({ params }: { params: Promise<{ username: string }> }) {
 
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">Archive</h2>
+        {data.postTotal > posts.length ? (
+          <p className="text-xs text-muted-foreground">
+            Showing {posts.length} of {data.postTotal} posts. The newest stay on this page.
+          </p>
+        ) : null}
         <ul className="flex flex-col gap-3">
           {posts.map((post) => (
             <li key={post.id} className="rounded-xl border bg-card/70 p-4">

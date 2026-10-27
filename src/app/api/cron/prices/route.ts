@@ -2,13 +2,17 @@ import { connection } from "next/server"
 import { requireBearer } from "@/lib/http"
 import { runPriceJob } from "@/lib/prices/job"
 
+export const maxDuration = 60
+
 async function handle(request: Request) {
   const denied = requireBearer(request, "CRON_SECRET")
   if (denied) return denied
   const url = new URL(request.url)
-  const limit = Number(url.searchParams.get("limit") ?? "4")
+  const raw = url.searchParams.get("limit")
+  const parsed = raw == null ? 400 : Number(raw)
+  const limit = Number.isFinite(parsed) ? parsed : 400
   try {
-    const result = await runPriceJob({ limit: Number.isFinite(limit) ? limit : 4 })
+    const result = await runPriceJob({ limit })
     return Response.json(result)
   } catch (error) {
     return Response.json(

@@ -499,6 +499,10 @@ function buildSeries(opts: {
 }
 
 async function main() {
+  if (process.env.SEED_DEMO !== "true") {
+    console.log("SEED_DEMO is not true. Skipping demo voices. Set SEED_DEMO=true to load them.")
+    return
+  }
   const db = getDb()
   await db.delete(influencers).where(eq(influencers.isDemo, true))
 

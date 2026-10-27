@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm"
+import { and, desc, eq, getTableColumns, ilike, inArray, or, sql } from "drizzle-orm"
 import { getDb } from "./db"
 import { influencerStats, influencers, mentions, posts, quotes } from "./db/schema"
 import { downsample, type Candle } from "./scoring/evaluate"
@@ -17,14 +17,15 @@ export async function getOverview() {
       shills: sql<number>`count(*)::int`,
       flagged: sql<number>`count(*) filter (where ${mentions.pumpDumpFlag})::int`,
       priced: sql<number>`count(*) filter (where ${mentions.priceAt} is not null)::int`,
+      pending: sql<number>`count(*) filter (where ${mentions.priceStatus} in ('pending', 'partial') and ${mentions.pinned} = false)::int`,
     })
     .from(mentions)
-  const medians = await db
-    .select({ roi: mentions.roi7d })
+  const [medianRow] = await db
+    .select({
+      median7d: sql<number | null>`percentile_cont(0.5) within group (order by ${mentions.roi7d})::float8`,
+    })
     .from(mentions)
     .where(sql`${mentions.roi7d} is not null`)
-  const sorted = medians.map((row) => row.roi as number).sort((a, b) => a - b)
-  const median7d = sorted.length ? sorted[Math.floor((sorted.length - 1) / 2)] : null
   return {
     voices: counts?.voices ?? 0,
     demoVoices: counts?.demoVoices ?? 0,
@@ -32,8 +33,14 @@ export async function getOverview() {
     shills: mentionCount?.shills ?? 0,
     flagged: mentionCount?.flagged ?? 0,
     priced: mentionCount?.priced ?? 0,
-    median7d,
+    pending: mentionCount?.pending ?? 0,
+    median7d: medianRow?.median7d == null ? null : Number(medianRow.median7d),
   }
+}
+
+export async function getPricingProgress() {
+  const overview = await getOverview()
+  return { priced: overview.priced, total: overview.shills, pending: overview.pending }
 }
 
 export async function getLeaderboard() {
@@ -84,22 +91,70 @@ export async function getInfluencer(username: string) {
     .limit(1)
   if (!rows[0]) return null
   const influencer = rows[0].influencers
+  const stats = rows[0].influencer_stats
+  const { series: _series, ...mentionCols } = getTableColumns(mentions)
+  const [mentionCount] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(mentions)
+    .where(eq(mentions.influencerId, influencer.id))
+  const mentionTotal = mentionCount?.n ?? 0
   const mentionRows = await db
-    .select()
+    .select(mentionCols)
     .from(mentions)
     .where(eq(mentions.influencerId, influencer.id))
     .orderBy(desc(mentions.createdAt))
+    .limit(mentionTotal > 400 ? 80 : 400)
+  const extraIds = [stats?.bestMentionId, stats?.worstMentionId].filter((id): id is string => Boolean(id))
+  const missing = extraIds.filter((id) => !mentionRows.some((row) => row.id === id))
+  if (missing.length) {
+    const extra = await db.select(mentionCols).from(mentions).where(inArray(mentions.id, missing))
+    mentionRows.push(...extra)
+  }
+  const [postCount] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(posts)
+    .where(eq(posts.influencerId, influencer.id))
   const postRows = await db
     .select()
     .from(posts)
     .where(eq(posts.influencerId, influencer.id))
     .orderBy(desc(posts.createdAt))
+    .limit(30)
+  const mixResult = await db.execute(sql`
+    select symbol, chain, count(*)::int as n
+    from mentions
+    where influencer_id = ${influencer.id} and symbol is not null
+    group by symbol, chain
+    order by n desc
+    limit 8
+  `)
+  const weekResult = await db.execute(sql`
+    select to_char(date_trunc('week', created_at), 'YYYY-MM-DD') as week, avg(roi_7d)::float8 as roi
+    from mentions
+    where influencer_id = ${influencer.id} and roi_7d is not null
+    group by 1
+    order by 1 desc
+    limit 16
+  `)
+  const mixRows = resultRows<{ symbol: string; chain: string | null; n: number }>(mixResult)
+  const weekRows = resultRows<{ week: string; roi: number | null }>(weekResult).reverse()
   return {
     influencer,
-    stats: rows[0].influencer_stats,
+    stats,
     mentions: mentionRows,
     posts: postRows,
+    mentionTotal,
+    postTotal: postCount?.n ?? postRows.length,
+    mix: mixRows.map((row) => ({ symbol: row.symbol, chain: row.chain, count: Number(row.n) })),
+    weeks: weekRows.map((row) => ({ week: row.week, roi: row.roi == null ? null : Number(row.roi) })),
   }
+}
+
+function resultRows<T>(result: unknown): T[] {
+  if (result && typeof result === "object" && "rows" in result && Array.isArray(result.rows)) {
+    return result.rows as T[]
+  }
+  return Array.isArray(result) ? (result as T[]) : []
 }
 
 export async function getMention(id: string) {
@@ -132,7 +187,26 @@ export async function getTicker(symbol: string) {
       ),
     )
     .orderBy(desc(mentions.createdAt))
-  return { query: normalized, rows }
+    .limit(40)
+  const [count] = await db
+    .select({
+      n: sql<number>`count(*)::int`,
+      avg: sql<number | null>`avg(${mentions.roi7d})::float8`,
+    })
+    .from(mentions)
+    .where(
+      or(
+        sql`upper(${mentions.symbol}) = upper(${normalized})`,
+        eq(mentions.contractAddress, normalized),
+        eq(mentions.coingeckoId, normalized.toLowerCase()),
+      ),
+    )
+  return {
+    query: normalized,
+    rows,
+    total: count?.n ?? rows.length,
+    avg7d: count?.avg == null ? null : Number(count.avg),
+  }
 }
 
 export async function getFeed(limit = 40) {
@@ -230,4 +304,26 @@ export async function listTrackedForBot() {
     .from(influencers)
     .where(and(eq(influencers.tracked, true), eq(influencers.isDemo, false)))
     .orderBy(influencers.username)
+}
+
+export async function getSparklines() {
+  const db = getDb()
+  const result = await db.execute(sql`
+    select influencer_id, roi_7d
+    from (
+      select influencer_id, roi_7d, created_at,
+        row_number() over (partition by influencer_id order by created_at desc) as rn
+      from mentions
+      where roi_7d is not null
+    ) ranked
+    where rn <= 18
+    order by influencer_id, created_at asc
+  `)
+  const map = new Map<string, number[]>()
+  for (const row of resultRows<{ influencer_id: string; roi_7d: number }>(result)) {
+    const list = map.get(row.influencer_id) ?? []
+    list.push(Number(row.roi_7d))
+    map.set(row.influencer_id, list)
+  }
+  return map
 }

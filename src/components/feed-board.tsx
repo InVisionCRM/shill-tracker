@@ -9,6 +9,7 @@ import type { FeedDTO } from "@/lib/types"
 import { RelativeTime } from "./animated-number"
 import { useLive } from "./live-provider"
 import { MarkRoi } from "./mark"
+import { TokenLogo } from "./token-logo"
 import { VoiceAvatar } from "./voice-avatar"
 
 export function FeedBoard({ initial, live = true }: { initial: FeedDTO[]; live?: boolean }) {
@@ -66,7 +67,8 @@ export function FeedBoard({ initial, live = true }: { initial: FeedDTO[]; live?:
                 <p className="mt-2 line-clamp-3 text-sm leading-6">{item.text}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
                   {item.symbol ? (
-                    <Link href={`/tickers/${item.symbol}`} className="font-mono text-phosphor hover:underline">
+                    <Link href={`/tickers/${item.symbol}`} className="inline-flex items-center gap-1.5 font-mono text-phosphor hover:underline">
+                      <TokenLogo symbol={item.symbol} className="size-5" />
                       ${item.symbol}
                     </Link>
                   ) : (

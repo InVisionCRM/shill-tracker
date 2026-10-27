@@ -103,18 +103,23 @@ export async function resolveSymbol(symbol: string): Promise<ResolvedAsset> {
     if (top) {
       const second = ranked[1]?.market_cap ?? null
       const confidence = confidenceFromCaps(top.market_cap ?? 0, second)
+      const hexNote =
+        top.id === "hex"
+          ? " This is the Ethereum HEX listing. PulseChain-focused accounts are priced from the PulseChain pool that shares this contract."
+          : ""
       const reason =
-        confidence === "high"
+        (confidence === "high"
           ? `${top.name} leads other $${symbol.toUpperCase()} listings by market cap (${formatCap(top.market_cap)} vs ${formatCap(second)}).`
           : confidence === "medium"
             ? `${top.name} is the largest $${symbol.toUpperCase()} by market cap, but a runner-up is close enough to keep this at medium confidence.`
-            : `Several assets share $${symbol.toUpperCase()}. ${top.name} is the largest (${formatCap(top.market_cap)}), but the lead is thin, so this match is low confidence.`
+            : `Several assets share $${symbol.toUpperCase()}. ${top.name} is the largest (${formatCap(top.market_cap)}), but the lead is thin, so this match is low confidence.`) +
+        hexNote
       return pack({
         symbol: top.symbol.toUpperCase(),
         assetName: top.name,
         coingeckoId: top.id,
         binanceSymbol: null,
-        chain: null,
+        chain: top.id === "hex" ? "ethereum" : null,
         contractAddress: null,
         pairAddress: null,
         dexscreenerUrl: null,

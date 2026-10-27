@@ -2,6 +2,8 @@ import { connection } from "next/server"
 import { requireBearer } from "@/lib/http"
 import { recomputeInfluencers } from "@/lib/stats"
 
+export const maxDuration = 60
+
 async function handle(request: Request) {
   const denied = requireBearer(request, "CRON_SECRET")
   if (denied) return denied

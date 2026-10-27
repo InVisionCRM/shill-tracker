@@ -1,13 +1,14 @@
-import { inArray } from "drizzle-orm"
+import { getTableColumns, inArray } from "drizzle-orm"
 import { getDb } from "./db"
 import { influencerStats, mentions, posts } from "./db/schema"
 import { aggregateInfluencer, type StatMention } from "./scoring/aggregate"
 
 export async function recomputeInfluencers(influencerIds?: string[]) {
   const db = getDb()
+  const { series: _series, ...mentionCols } = getTableColumns(mentions)
   const mentionRows = influencerIds?.length
-    ? await db.select().from(mentions).where(inArray(mentions.influencerId, influencerIds))
-    : await db.select().from(mentions)
+    ? await db.select(mentionCols).from(mentions).where(inArray(mentions.influencerId, influencerIds))
+    : await db.select(mentionCols).from(mentions)
   const postRows = influencerIds?.length
     ? await db
         .select({ influencerId: posts.influencerId })

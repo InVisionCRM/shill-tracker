@@ -80,6 +80,30 @@ export function dumpTone(score: number | null | undefined) {
   return "text-gain"
 }
 
+export function chainLabel(chain: string | null | undefined) {
+  if (!chain) return null
+  const labels: Record<string, string> = {
+    pulsechain: "PulseChain",
+    ethereum: "Ethereum",
+    solana: "Solana",
+    bsc: "BSC",
+    base: "Base",
+  }
+  return labels[chain.toLowerCase()] ?? chain
+}
+
+export function chainShort(chain: string | null | undefined) {
+  if (!chain) return null
+  const labels: Record<string, string> = {
+    pulsechain: "PLS",
+    ethereum: "ETH",
+    solana: "SOL",
+    bsc: "BSC",
+    base: "BASE",
+  }
+  return labels[chain.toLowerCase()] ?? chain.slice(0, 4).toUpperCase()
+}
+
 export function shortAddress(value: string | null | undefined) {
   if (!value) return ""
   if (value.length <= 14) return value

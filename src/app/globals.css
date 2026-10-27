@@ -133,8 +133,13 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    overflow-x: hidden;
+  }
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
+    max-width: 100%;
     background-image:
       radial-gradient(1100px 480px at 0% -10%, color-mix(in oklch, var(--phosphor) 16%, transparent), transparent 55%),
       radial-gradient(800px 420px at 100% 0%, color-mix(in oklch, var(--chart-4) 14%, transparent), transparent 50%),
@@ -157,6 +162,88 @@
   animation: marquee 42s linear infinite;
 }
 
+.glass-card {
+  background: color-mix(in oklch, var(--card) 72%, transparent);
+  border: 1px solid color-mix(in oklch, var(--foreground) 12%, transparent);
+  box-shadow: 0 10px 40px color-mix(in oklch, black 35%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.glass-card:hover {
+  border-color: color-mix(in oklch, var(--phosphor) 45%, transparent);
+  transform: translateY(-2px);
+}
+
+.dump-glow {
+  box-shadow: 0 0 18px color-mix(in oklch, var(--loss) 55%, transparent);
+  animation: dump-pulse 1.6s ease-in-out infinite;
+}
+
+.chart-draw {
+  stroke-dasharray: 1400;
+  stroke-dashoffset: 1400;
+  animation: chart-draw 1.1s ease-out forwards;
+}
+
+.call-marker {
+  animation: marker-pulse 1.8s ease-in-out infinite;
+}
+
+.shimmer {
+  background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--foreground) 12%, transparent), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.confetti-bit {
+  width: 6px;
+  height: 10px;
+  border-radius: 2px;
+  animation: confetti 900ms ease-out both;
+}
+
+.rug-shake {
+  animation: rug 420ms ease-in-out 2;
+}
+
+@keyframes dump-pulse {
+  50% { box-shadow: 0 0 6px color-mix(in oklch, var(--loss) 25%, transparent); }
+}
+
+@keyframes chart-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes marker-pulse {
+  50% { opacity: 0.35; }
+}
+
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@keyframes confetti {
+  from { transform: translateY(0) rotate(0); opacity: 1; }
+  to { transform: translateY(28px) rotate(40deg); opacity: 0; }
+}
+
+@keyframes rug {
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track { animation: none; }
+  .marquee-track,
+  .dump-glow,
+  .chart-draw,
+  .call-marker,
+  .shimmer,
+  .confetti-bit,
+  .rug-shake,
+  .glass-card {
+    animation: none;
+    transform: none;
+  }
+  .chart-draw { stroke-dashoffset: 0; }
 }

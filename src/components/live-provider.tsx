@@ -1,12 +1,13 @@
 "use client"
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
-import type { FeedDTO, QuoteDTO } from "@/lib/types"
+import type { FeedDTO, PricingProgress, QuoteDTO } from "@/lib/types"
 
 type LiveState = {
   quotes: QuoteDTO[]
   latest: FeedDTO[]
   prices: Record<string, number>
+  progress: PricingProgress | null
   connected: boolean
   updatedAt: string | null
 }
@@ -15,6 +16,7 @@ const LiveContext = createContext<LiveState>({
   quotes: [],
   latest: [],
   prices: {},
+  progress: null,
   connected: false,
   updatedAt: null,
 })
@@ -43,6 +45,7 @@ export function LiveProvider({
 }) {
   const [quotes, setQuotes] = useState(initialQuotes)
   const [latest, setLatest] = useState(initialLatest)
+  const [progress, setProgress] = useState<PricingProgress | null>(null)
   const [connected, setConnected] = useState(false)
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
 
@@ -56,10 +59,12 @@ export function LiveProvider({
           now: string
           quotes: QuoteDTO[]
           latest: FeedDTO[]
+          progress?: PricingProgress
         }
         if (stop) return
         if (body.quotes?.length) setQuotes(body.quotes)
         if (body.latest) setLatest(body.latest)
+        if (body.progress) setProgress(body.progress)
         setUpdatedAt(body.now)
         setConnected(true)
       } catch {
@@ -76,8 +81,8 @@ export function LiveProvider({
 
   const prices = useMemo(() => indexPrices(quotes), [quotes])
   const value = useMemo(
-    () => ({ quotes, latest, prices, connected, updatedAt }),
-    [quotes, latest, prices, connected, updatedAt],
+    () => ({ quotes, latest, prices, progress, connected, updatedAt }),
+    [quotes, latest, prices, progress, connected, updatedAt],
   )
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>
 }

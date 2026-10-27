@@ -36,11 +36,12 @@ Migrations live in `drizzle/`. `pnpm db:migrate` uses the direct `DATABASE_URL` 
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | yes | Postgres connection string. Use the Neon **pooled** URL for the Vercel app. |
-| `DATABASE_URL_UNPOOLED` | no | Documented for Neon migrations. This repo's migrate script reads `DATABASE_URL`, so set that to the direct URL when you migrate. |
+| `DATABASE_URL_UNPOOLED` | no | Direct Neon URL (no `-pooler`). `vercel-build` migrates with this when it is set, and otherwise uses `DATABASE_URL`. |
 | `INGEST_SECRET` | yes | Bearer token for the ingest and influencer APIs. |
 | `CRON_SECRET` | yes | Bearer token for `/api/cron/prices` and `/api/cron/scores`. On Vercel, defining this makes Cron send `Authorization: Bearer $CRON_SECRET`. |
 | `COINGECKO_API_KEY` | no | Demo or pro key. Public CoinGecko works without one and is rate limited harder. |
 | `COINGECKO_API_TIER` | no | `demo` (default when a key is set) or `pro`. |
+| `SEED_DEMO` | no | Set to `true` only when you want `pnpm db:seed` to load fictional voices. Production must leave it unset. |
 
 Do not commit `.env.local`.
 
@@ -150,7 +151,11 @@ Response:
 
 `pricing` is a best-effort pass (a few mentions) so new calls pick up a price in the same request. Failures stay `pending` for the cron. A second identical POST returns `mentions_created: 0` and `posts_unchanged: 1`.
 
+For a bulk backfill, add `?defer_pricing=1`. That skips the inline price job and skips recomputing voice scores, so a batch of 100 posts returns as soon as the rows are written. Drain prices afterward with the cron.
+
 Canonical tickers (`$BTC`, `$ETH`, bitcoin, ethereum, …) resolve immediately. Other symbols and contract addresses are resolved on the price job via CoinGecko market cap or DexScreener liquidity. Ambiguous symbols are flagged low confidence. A mixed-case `0x` address is not also scanned as a Solana mint: base58 slices that sit inside the hex span are ignored.
+
+PulseChain-focused accounts (preset: `@iambroots`, or any voice stored with `chain_bias = pulsechain`) resolve `$HEX`, `$PLS`, `$PLSX`, `$INC`, and `$PDAI` to PulseChain pools. Plain words `hex`, `pulsechain`, `pulsex`, `plsx`, `incentive`, and `pdai` count for that voice only. HEX also exists on Ethereum and shares the contract `0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39`; other accounts are priced from the Ethereum CoinGecko listing and the chain is shown in the UI. Pulse assets are not given a CoinGecko id, so they are not priced as the Ethereum token. PLS is the WPLS pool, not the thin “PulseChain” token. PDAI is Good DAI, not Ethereum DAI.
 
 ## Cron
 
@@ -160,11 +165,13 @@ GET or POST /api/cron/scores
 Authorization: Bearer $CRON_SECRET
 ```
 
-`/api/cron/prices` resolves pending assets, backfills hourly history, refreshes current marks, and recomputes voice scores. `limit` defaults to 4 so a Vercel function stays inside a short timeout. Run it often; each pass continues the queue.
+`/api/cron/prices` resolves a few pending assets, fills a candle-day cache, prices every fully covered call in the batch, refreshes current marks, and recomputes scores for voices that just got prices. With no `limit` query it works through up to 400 calls. An explicit `?limit=4` still means 4. Each run fetches at most two assets and at most about 40 missing days per asset, and stops around 35 seconds so a 60 second function can finish.
 
-`/api/cron/scores` only recomputes aggregates.
+`/api/cron/scores` only recomputes aggregates. List queries omit the candle series so a voice with tens of thousands of mentions does not load that JSON.
 
-`vercel.json` schedules prices every 5 minutes and scores hourly at minute 15. Vercel Cron is UTC.
+`vercel.json` schedules both jobs once a day (06:00 and 06:30 UTC), which is what Vercel Hobby allows. An external caller can hit the same routes with `CRON_SECRET` as often as you need to drain a backlog. The home tape shows `Pricing X / Y calls` while any calls are still queued.
+
+Repeated tickers reuse `candle_days`. A day that was fetched and had no prints is stored empty so it is not requested again. GeckoTerminal returns at most 1000 hourly candles per call, so a multi-year HEX history continues across runs.
 
 Pinned demo mentions are skipped. A real ingest is not pinned.
 
@@ -185,14 +192,14 @@ The in-app method page (`/methodology`) is the formula, and it renders the same 
 - **CoinGecko public API** is roughly 5–15 calls per minute. The app waits about 1.6s between calls, retries 429s, and caches search and market-cap lookups. A demo key (`COINGECKO_API_KEY`) raises that. Very old ranges may come back as daily candles; the 36 hour gap rule still accepts them, so the “price at post” is the nearest daily close, not a trade print.
 - **Binance** hourly klines cover listed USDT pairs for years. Requests go to `data-api.binance.vision` first, then `api.binance.com`. The latter returns HTTP 451 from some regions; either failure falls through to CoinGecko. The app does not guess a USDT pair for low-confidence tickers.
 - **DexScreener** is used to pick the most liquid pair (about 300 requests/minute on their public API). It does not provide the historical path.
-- **GeckoTerminal** hourly pool OHLCV is about 30 requests/minute here (the client waits 1.3s). History starts when the pool exists. A brand new mint has no pre-call window, so the pump score stays blank. Each request returns up to 1000 hourly candles, which covers the 7 days before plus 30 days after.
+- **GeckoTerminal** hourly pool OHLCV is about 30 requests/minute here (the client waits 1.3s). History starts when the pool exists. A brand new mint has no pre-call window, so the pump score stays blank. Each request returns up to 1000 hourly candles (~41 days). The price cron stores those by UTC day and continues the next gap on the next call, so a years-long book is not fetched in one Hobby invocation.
 - **Contracts with no pair**, dead addresses, and symbols CoinGecko and DexScreener both miss are stored as unresolved and are not given a fake price.
 - **Ambiguous tickers** (many tokens sharing `$OMNI`, `$AI`, …) take the largest market cap or the most liquid pair and are badged when the lead is thin. That pick can still be the wrong asset.
 - **Stablecoins and wrapped assets** can match a canonical symbol and show a flat return. That is a boring call, not a data bug.
 - **Max excursion stops at 30 days** so a mark a year later does not rewrite the historical gain.
 - The UI is open. Ingest and cron are the authenticated edges. Put the deployment behind a network control if the leaderboard should not be public.
-- Demo seed prices are illustrative. Re-run `pnpm db:seed` to refresh their relative clocks. It deletes rows with `is_demo = true` and leaves real ingests alone.
+- Demo seed prices are illustrative. `pnpm db:seed` does nothing unless `SEED_DEMO=true`. With the flag it deletes rows with `is_demo = true` and leaves real ingests alone.
 
 ## Deploy
 
-Deploy the Next.js app on Vercel with the env vars above and a Neon pooled `DATABASE_URL`. Run `pnpm db:migrate` and, if you want the demo tape, `pnpm db:seed` against the direct connection string before or after the first deploy. Cron is already declared in `vercel.json`.
+Deploy the Next.js app on Vercel with the env vars above. Set `DATABASE_URL` to the Neon **pooled** URL and `DATABASE_URL_UNPOOLED` to the direct URL. The `vercel-build` script migrates with the unpooled URL (or `DATABASE_URL` if that is all you have) and then runs `next build`. It never seeds. Leave `SEED_DEMO` unset in production. Cron in `vercel.json` is daily; call `/api/cron/prices` yourself with `CRON_SECRET` to work through a large backlog.

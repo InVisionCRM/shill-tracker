@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { connection } from "next/server"
 import { Leaderboard } from "@/components/leaderboard"
-import { getLeaderboard } from "@/lib/queries"
+import { getLeaderboard, getSparklines } from "@/lib/queries"
 import { toLeader } from "@/lib/serialize"
 
 export const metadata = { title: "Leaderboard" }
@@ -16,7 +16,8 @@ export default function LeaderboardPage() {
 
 async function Board() {
   await connection()
-  const rows = (await getLeaderboard()).map(toLeader)
+  const [board, sparks] = await Promise.all([getLeaderboard(), getSparklines()])
+  const rows = board.map((row) => ({ ...toLeader(row), sparkline: sparks.get(row.id) ?? [] }))
   return (
     <div className="flex flex-col gap-4">
       <div>

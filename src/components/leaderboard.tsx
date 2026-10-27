@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Sparkline } from "./sparkline"
 import { VoiceAvatar } from "./voice-avatar"
 
 const SORTS = [
@@ -91,7 +92,53 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
           </SelectContent>
         </Select>
       </div>
-      <div className="overflow-x-auto rounded-xl border">
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 md:hidden">
+        {filtered.map((row, index) => (
+          <Link
+            key={row.id}
+            href={`/influencers/${row.username}`}
+            className="glass-card w-[86%] shrink-0 snap-center rounded-2xl p-4"
+          >
+            <div className="flex items-center gap-3">
+              <VoiceAvatar src={row.profileImageUrl} username={row.username} className="size-12" />
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{row.name}</span>
+                <span className="block font-mono text-xs text-muted-foreground">
+                  @{row.username} · {formatCompact(row.followersCount)}
+                </span>
+              </span>
+              <span className="ml-auto font-mono text-xs text-muted-foreground">#{index + 1}</span>
+            </div>
+            <Sparkline values={row.sparkline ?? []} className="mt-3" />
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <span>
+                <span className="block text-[10px] tracking-wide text-muted-foreground uppercase">Credibility</span>
+                <span className={`font-mono text-lg ${scoreTone(row.credibilityScore)}`}>
+                  {row.credibilityScore == null ? "—" : Math.round(row.credibilityScore)}
+                </span>
+              </span>
+              <span>
+                <span className="block text-[10px] tracking-wide text-muted-foreground uppercase">Dump risk</span>
+                <span className={`font-mono text-lg ${dumpTone(row.dumpRiskScore)}`}>
+                  {row.dumpRiskScore == null ? "—" : Math.round(row.dumpRiskScore)}
+                </span>
+              </span>
+              <span className={roiClass(row.medianRoi7d)}>
+                <span className="block text-[10px] tracking-wide text-muted-foreground uppercase">Median 7d</span>
+                <span className="font-mono">{formatRoi(row.medianRoi7d)}</span>
+              </span>
+              <span>
+                <span className="block text-[10px] tracking-wide text-muted-foreground uppercase">Shills</span>
+                <span className="font-mono">{row.shillCount}</span>
+              </span>
+            </div>
+          </Link>
+        ))}
+        {filtered.length === 0 ? (
+          <p className="w-full py-8 text-center text-sm text-muted-foreground">No voices match that filter.</p>
+        ) : null}
+      </div>
+      <div className="hidden overflow-x-auto rounded-xl border md:block">
         <Table>
           <TableHeader>
             <TableRow>

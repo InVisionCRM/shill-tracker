@@ -30,14 +30,28 @@ async function Home() {
         <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">
           Every post from the voices you track. Every ticker they touch. The price after they said it.
         </h1>
-        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-          Demo voices are fictional and badged. Their charts are labeled SEED until you point the price cron at a
-          real post. The tape above polls live marks from public exchanges.
-        </p>
+        {overview.voices === 0 && overview.shills === 0 ? (
+          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+            No voices yet. Add a handle, then POST posts to /api/ingest/posts. Prices fill from the queue after that.
+          </p>
+        ) : overview.demoVoices > 0 ? (
+          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+            Demo voices are fictional and badged. Their charts are labeled SEED. The tape polls live marks from public exchanges.
+          </p>
+        ) : (
+          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+            Live marks poll from public exchanges. Historical candles fill from the price queue, one day-cache at a time.
+          </p>
+        )}
         {overview.demoVoices > 0 ? (
           <Badge variant="outline" className="w-fit">
             {overview.demoVoices} demo voices in the book
           </Badge>
+        ) : null}
+        {overview.shills > 0 && overview.priced < overview.shills ? (
+          <p className="font-mono text-xs text-muted-foreground">
+            Pricing {overview.priced.toLocaleString()} / {overview.shills.toLocaleString()} calls
+          </p>
         ) : null}
       </section>
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">

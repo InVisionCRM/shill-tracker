@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  primaryKey,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core"
@@ -28,6 +29,10 @@ export const influencers = pgTable(
     listedCount: integer("listed_count").notNull().default(0),
     tracked: boolean("tracked").notNull().default(true),
     isDemo: boolean("is_demo").notNull().default(false),
+    /** pulsechain, ethereum, solana, … Preferred chain when a symbol exists on more than one. */
+    chainBias: text("chain_bias"),
+    /** Lowercase word → ticker symbol, used only for this voice. */
+    aliases: jsonb("aliases").$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
     latestPostId: text("latest_post_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -181,6 +186,19 @@ export const influencerStats = pgTable("influencer_stats", {
   sampleSize: integer("sample_size").notNull().default(0),
   computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
 })
+
+/** One row per asset per UTC day so repeated tickers reuse candles. */
+export const candleDays = pgTable(
+  "candle_days",
+  {
+    assetKey: text("asset_key").notNull(),
+    day: text("day").notNull(),
+    candles: jsonb("candles").$type<Candle[]>().notNull().default(sql`'[]'::jsonb`),
+    source: text("source").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.assetKey, t.day] })],
+)
 
 export const quotes = pgTable("quotes", {
   assetKey: text("asset_key").primaryKey(),

@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { RelativeTime } from "@/components/animated-number"
 import { MarkRoi } from "@/components/mark"
-import { formatRoi, formatUsd, roiClass, shortAddress } from "@/lib/format"
+import { TokenLogo } from "@/components/token-logo"
+import { chainLabel, formatRoi, formatUsd, roiClass, shortAddress } from "@/lib/format"
 import { getTicker } from "@/lib/queries"
 
 export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }) {
@@ -25,21 +26,30 @@ export default function TickerPage({ params }: { params: Promise<{ symbol: strin
 async function Ticker({ params }: { params: Promise<{ symbol: string }> }) {
   await connection()
   const { symbol } = await params
-  const { query, rows } = await getTicker(symbol)
+  const { query, rows, total, avg7d } = await getTicker(symbol)
   const first = rows[0]?.mentions
-  const rois = rows.map((row) => row.mentions.roi7d).filter((value): value is number => value != null)
-  const avg = rois.length ? rois.reduce((sum, value) => sum + value, 0) / rois.length : null
+  const avg = avg7d
+  const chains = [
+    ...new Set(rows.map((row) => row.mentions.chain).filter((chain): chain is string => Boolean(chain))),
+  ]
   return (
     <div className="flex flex-col gap-6">
       <header>
         <p className="font-mono text-xs tracking-[0.18em] text-phosphor uppercase">Ticker</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-          {first?.symbol ? `$${first.symbol}` : query}
-        </h1>
+        <div className="mt-2 flex items-center gap-3">
+          <TokenLogo symbol={first?.symbol ?? query} chain={first?.chain} className="size-12" />
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {first?.symbol ? `$${first.symbol}` : query}
+          </h1>
+        </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          {first?.assetName ?? "No resolved name yet"} · {rows.length} calls
-          {first?.contractAddress ? ` · ${first.chain ?? ""} ${shortAddress(first.contractAddress)}` : ""}
+          {first?.assetName ?? "No resolved name yet"} · {total} calls
+          {chains.length ? ` · ${chains.map((chain) => chainLabel(chain)).join(", ")}` : ""}
+          {first?.contractAddress ? ` · ${shortAddress(first.contractAddress)}` : ""}
         </p>
+        {total > rows.length ? (
+          <p className="mt-1 text-xs text-muted-foreground">Showing the newest {rows.length}.</p>
+        ) : null}
       </header>
       {rows.length === 0 ? (
         <Empty className="border">

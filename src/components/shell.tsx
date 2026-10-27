@@ -3,6 +3,7 @@
 import { Suspense } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { Activity, Radio, ScrollText, Search, Trophy, Users } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "cn"
 import type { FeedDTO, QuoteDTO } from "@/lib/types"
@@ -12,11 +13,11 @@ import { LiveProvider, useLive } from "./live-provider"
 import { TrackVoiceDialog } from "./voice-actions"
 
 const LINKS = [
-  { href: "/", label: "Tape" },
-  { href: "/leaderboard", label: "Leaderboard" },
-  { href: "/feed", label: "Feed" },
-  { href: "/influencers", label: "Voices" },
-  { href: "/methodology", label: "Method" },
+  { href: "/", label: "Tape", icon: Activity },
+  { href: "/leaderboard", label: "Board", icon: Trophy },
+  { href: "/feed", label: "Feed", icon: Radio },
+  { href: "/influencers", label: "Voices", icon: Users },
+  { href: "/methodology", label: "Method", icon: ScrollText },
 ]
 
 export function AppFrame({
@@ -33,9 +34,13 @@ export function AppFrame({
       <div className="flex min-h-full flex-col">
         <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur-md">
           <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3">
-            <Link href="/" className="flex items-baseline gap-2">
-              <span className="font-mono text-sm font-semibold tracking-[0.22em] text-phosphor">SHILL</span>
-              <span className="font-mono text-sm tracking-[0.22em] text-foreground">TRACKER</span>
+            <Link href="/" className="flex items-center gap-2">
+              <span className="flex size-7 items-center justify-center rounded-md bg-phosphor font-mono text-xs font-bold text-primary-foreground">
+                S
+              </span>
+              <span className="font-mono text-sm font-semibold tracking-[0.18em]">
+                <span className="text-phosphor">SHILL</span> TRACKER
+              </span>
             </Link>
             <form action="/search" className="mx-auto hidden min-w-0 flex-1 md:block">
               <input
@@ -45,7 +50,10 @@ export function AppFrame({
                 className="h-8 w-full rounded-lg border bg-card/60 px-3 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40"
               />
             </form>
-            <div className="ml-auto flex items-center gap-3">
+            <Link href="/search" className="ml-auto md:hidden" aria-label="Search">
+              <Search className="size-4" />
+            </Link>
+            <div className="flex items-center gap-3 md:ml-auto">
               <LiveDot />
               <Clock />
               <div className="hidden sm:block">
@@ -53,23 +61,22 @@ export function AppFrame({
               </div>
             </div>
           </div>
-          <nav className="mx-auto flex w-full max-w-6xl gap-1 overflow-x-auto px-4 pb-2">
+          <nav className="mx-auto hidden w-full max-w-6xl gap-1 px-4 pb-2 md:flex">
             <Suspense fallback={<NavFallback />}>
               <NavLinks />
             </Suspense>
           </nav>
           <Tape />
+          <PricingBar />
         </header>
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-24">{children}</main>
-        <footer className="border-t py-6 text-center text-xs text-muted-foreground">
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-28">{children}</main>
+        <footer className="mb-16 border-t py-6 text-center text-xs text-muted-foreground md:mb-0">
           Calls are not advice. Seed paths are labeled. Live marks come from Binance, CoinGecko, and DexScreener.
         </footer>
-        <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-background/95 backdrop-blur md:hidden">
-          {LINKS.map((link) => (
-            <Link key={link.href} href={link.href} className="flex-1 py-3 text-center text-xs">
-              {link.label}
-            </Link>
-          ))}
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur md:hidden pb-[env(safe-area-inset-bottom)]">
+          <Suspense fallback={null}>
+            <BottomTabs />
+          </Suspense>
         </nav>
       </div>
     </LiveProvider>
@@ -96,6 +103,31 @@ function NavLinks() {
   )
 }
 
+function BottomTabs() {
+  const pathname = usePathname()
+  return (
+    <div className="mx-auto flex max-w-lg">
+      {LINKS.map((link) => {
+        const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href)
+        const Icon = link.icon
+        return (
+          <Link
+            key={link.href}
+            href={link.href}
+            className={cn(
+              "flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] tracking-wide",
+              active ? "text-phosphor" : "text-muted-foreground",
+            )}
+          >
+            <Icon className="size-4" />
+            {link.label}
+          </Link>
+        )
+      })}
+    </div>
+  )
+}
+
 function NavFallback() {
   return (
     <>
@@ -115,6 +147,24 @@ function LiveDot() {
       <span className={`size-1.5 rounded-full ${connected ? "bg-gain" : "bg-warn"}`} />
       {connected ? "Live" : "Syncing"}
     </span>
+  )
+}
+
+function PricingBar() {
+  const { progress } = useLive()
+  if (!progress || progress.total === 0 || progress.priced >= progress.total) return null
+  const width = Math.max(4, Math.round((progress.priced / progress.total) * 100))
+  return (
+    <div className="border-t px-4 py-1.5">
+      <div className="mx-auto flex max-w-6xl items-center gap-3">
+        <p className="shrink-0 font-mono text-[10px] tracking-wide text-muted-foreground uppercase">
+          Pricing {progress.priced.toLocaleString()} / {progress.total.toLocaleString()} calls
+        </p>
+        <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+          <div className="h-full bg-phosphor" style={{ width: `${width}%` }} />
+        </div>
+      </div>
+    </div>
   )
 }
 

@@ -1,7 +1,10 @@
 import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
 import { canonicalBySymbol } from "../detect/assets"
+import { PULSE_BOOK, dexUrl } from "../detect/pulse"
 import { getDb } from "../db"
-import { cronRuns, mentions, quotes } from "../db/schema"
+import { cronRuns, influencers, mentions, quotes } from "../db/schema"
+import { priceFromCache } from "./backlog"
+import { getPricingProgress } from "../queries"
 import { assetKeyOf } from "../format"
 import { WEIGHTS, evaluateCall } from "../scoring/evaluate"
 import { recomputeInfluencers } from "../stats"
@@ -14,14 +17,21 @@ const DAY = 24 * HOUR
 let quoteInflight: Promise<void> | null = null
 let quoteAttemptAt = 0
 
-export async function runPriceJob(options?: { limit?: number; mentionIds?: string[] }) {
+export async function runPriceJob(options?: { limit?: number; mentionIds?: string[]; budgetMs?: number }) {
   const started = new Date()
   const db = getDb()
-  const limit = Math.min(Math.max(options?.limit ?? 4, 1), 20)
-  const detail: Record<string, unknown> = { resolved: 0, priced: 0, failed: 0, quotes: 0 }
+  const inline = Boolean(options?.mentionIds?.length)
+  const requested = options?.limit ?? (inline ? 4 : 400)
+  const limit = Math.min(Math.max(requested, 1), inline ? 20 : 800)
+  const detail: Record<string, unknown> = { resolved: 0, priced: 0, failed: 0, quotes: 0, candleFetches: 0 }
   const touched = new Set<string>()
 
   try {
+    if (!inline) {
+      const pulseResolved = await applyPulseBias()
+      detail.resolved = pulseResolved
+    }
+    const resolveLimit = inline ? limit : Math.min(6, limit)
     const pending = await db
       .select()
       .from(mentions)
@@ -33,7 +43,7 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
         ),
       )
       .orderBy(asc(mentions.createdAt))
-      .limit(limit)
+      .limit(resolveLimit)
 
     for (const mention of pending) {
       try {
@@ -80,6 +90,7 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
       }
     }
 
+    if (inline) {
     const history = await db
       .select()
       .from(mentions)
@@ -177,9 +188,23 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
           .where(eq(mentions.id, mention.id))
       }
     }
+    } else {
+      const backlog = await priceFromCache({
+        limit,
+        budgetMs: options?.budgetMs ?? 35_000,
+        assetFetches: 2,
+        startedAt: started.getTime(),
+      })
+      detail.priced = Number(detail.priced) + backlog.priced
+      detail.failed = Number(detail.failed) + backlog.failed
+      detail.candleFetches = backlog.fetches
+      for (const id of backlog.touched) touched.add(id)
+    }
 
     detail.quotes = await refreshQuotes()
     if (touched.size) await recomputeInfluencers([...touched])
+    const progress = await getPricingProgress()
+    detail.progress = progress
     await db.insert(cronRuns).values({
       job: "prices",
       startedAt: started,
@@ -250,12 +275,62 @@ export async function ensureFreshQuotes() {
   return quoteInflight
 }
 
+async function applyPulseBias() {
+  const db = getDb()
+  const biased = await db
+    .select({ id: influencers.id })
+    .from(influencers)
+    .where(eq(influencers.chainBias, "pulsechain"))
+  if (!biased.length) return 0
+  const ids = biased.map((row) => row.id)
+  let count = 0
+  for (const asset of Object.values(PULSE_BOOK)) {
+    const updated = await db
+      .update(mentions)
+      .set({
+        symbol: asset.symbol,
+        assetName: asset.name,
+        assetKey: `ct:pulsechain:${asset.contract}`,
+        coingeckoId: null,
+        binanceSymbol: null,
+        chain: "pulsechain",
+        contractAddress: asset.contract,
+        pairAddress: asset.pair,
+        dexscreenerUrl: dexUrl(asset.pair),
+        geckoterminalNetwork: "pulsechain",
+        confidence: "high",
+        confidenceReason: asset.reason,
+        resolutionStatus: "resolved",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(mentions.resolutionStatus, "pending"),
+          eq(mentions.pinned, false),
+          sql`upper(${mentions.symbol}) = ${asset.symbol}`,
+          inArray(mentions.influencerId, ids),
+        ),
+      )
+      .returning({ id: mentions.id })
+    count += updated.length
+  }
+  return count
+}
+
 export async function refreshQuotes() {
   const db = getDb()
   const rows = await db
-    .select()
+    .selectDistinct({
+      assetKey: mentions.assetKey,
+      symbol: mentions.symbol,
+      assetName: mentions.assetName,
+      binanceSymbol: mentions.binanceSymbol,
+      coingeckoId: mentions.coingeckoId,
+      contractAddress: mentions.contractAddress,
+      chain: mentions.chain,
+    })
     .from(mentions)
-    .where(and(eq(mentions.pinned, false), sql`${mentions.priceAt} is not null`))
+    .where(and(eq(mentions.pinned, false), sql`${mentions.priceAt} is not null`, sql`${mentions.assetKey} is not null`))
 
   const binance = new Map<string, { assetKey: string; symbol: string; name: string | null }>()
   const cg = new Map<string, { assetKey: string; symbol: string; name: string | null }>()
@@ -378,34 +453,20 @@ export async function refreshQuotes() {
       })
   }
 
-  const touched = new Set<string>()
-  for (const row of rows) {
-    const key = row.assetKey
-    if (!key) continue
-    const quote = prices.get(key)
-    if (!quote || row.priceAt == null || row.priceAt === 0) continue
-    const roiNow = quote.price / row.priceAt - 1
-    const withinExcursion = now.getTime() <= row.createdAt.getTime() + WEIGHTS.excursionWindowMs
-    const maxPrice = withinExcursion
-      ? Math.max(row.maxPriceAfter ?? quote.price, quote.price)
-      : row.maxPriceAfter
-    const minPrice = withinExcursion
-      ? Math.min(row.minPriceAfter ?? quote.price, quote.price)
-      : row.minPriceAfter
-    await db
-      .update(mentions)
-      .set({
-        priceNow: quote.price,
-        roiNow,
-        maxPriceAfter: maxPrice,
-        minPriceAfter: minPrice,
-        maxGain: maxPrice != null ? maxPrice / row.priceAt - 1 : row.maxGain,
-        maxDrawdown: minPrice != null ? minPrice / row.priceAt - 1 : row.maxDrawdown,
-        updatedAt: now,
-      })
-      .where(eq(mentions.id, row.id))
-    touched.add(row.influencerId)
+  const keys = [...prices.keys()]
+  if (keys.length) {
+    await db.execute(sql`
+      update mentions
+      set price_now = quotes.price,
+          roi_now = quotes.price / mentions.price_at - 1,
+          updated_at = now()
+      from quotes
+      where mentions.asset_key = quotes.asset_key
+        and mentions.pinned = false
+        and mentions.price_at is not null
+        and mentions.price_at <> 0
+        and mentions.asset_key in (${sql.join(keys.map((key) => sql`${key}`), sql`, `)})
+    `)
   }
-  if (touched.size) await recomputeInfluencers([...touched])
   return prices.size
 }

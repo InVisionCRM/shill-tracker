@@ -9,7 +9,9 @@ import { PostText } from "@/components/post-text"
 import { RelativeTime } from "@/components/animated-number"
 import { MarkPrice, MarkRoi } from "@/components/mark"
 import { VoiceAvatar } from "@/components/voice-avatar"
-import { formatRoi, formatUsd, roiClass, shortAddress } from "@/lib/format"
+import { OutcomeFlare } from "@/components/outcome-flare"
+import { TokenLogo } from "@/components/token-logo"
+import { chainLabel, formatRoi, formatUsd, roiClass, shortAddress } from "@/lib/format"
 import { getMention } from "@/lib/queries"
 
 export const metadata = { title: "Call" }
@@ -36,15 +38,20 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
   ] as const
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="relative flex flex-col gap-6">
+      <OutcomeFlare roi={mention.roi7d ?? mention.roiNow} />
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-3">
+          <TokenLogo symbol={mention.symbol} chain={mention.chain} className="size-12" />
           <VoiceAvatar src={voice.profileImageUrl} username={voice.username} />
           <div>
             <p className="font-mono text-xs tracking-[0.18em] text-phosphor uppercase">Call</p>
             <h1 className="text-3xl font-semibold tracking-tight">
               {mention.symbol ? `$${mention.symbol}` : mention.rawText}
             </h1>
+            {mention.chain ? (
+              <p className="text-xs text-muted-foreground">{chainLabel(mention.chain)}</p>
+            ) : null}
             <p className="text-sm text-muted-foreground">
               <Link href={`/influencers/${voice.username}`} className="hover:underline">
                 {voice.name}
@@ -57,7 +64,7 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
           {voice.isDemo ? <Badge variant="outline">Demo</Badge> : <Badge>Live</Badge>}
           <Badge variant="outline">{mention.confidence} confidence</Badge>
           <Badge variant="secondary">{mention.priceSource ?? mention.priceStatus}</Badge>
-          {mention.pumpDumpFlag ? <Badge variant="destructive">Pump-then-dump</Badge> : null}
+          {mention.pumpDumpFlag ? <Badge variant="destructive" className="dump-glow">Pump-then-dump</Badge> : null}
         </div>
       </header>
 
@@ -75,6 +82,7 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
               series={series.map((point) => ({ t: point.t, p: point.p }))}
               postedAt={mention.createdAt.toISOString()}
               entry={mention.priceAt}
+              postText={post.text}
             />
           </CardContent>
         </Card>

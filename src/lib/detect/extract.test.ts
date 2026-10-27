@@ -26,6 +26,22 @@ describe("extractMatches", () => {
     expect(matches).toEqual([])
   })
 
+  it("treats hex as a word unless the voice aliases it", () => {
+    expect(extractMatches("hex on pulsechain")).toEqual([])
+    const matches = extractMatches("hex and pulsex", { hex: "HEX", pulsex: "PLSX" })
+    expect(matches.map((match) => match.symbol).sort()).toEqual(["HEX", "PLSX"])
+  })
+
+  it("prices HEX on PulseChain for a biased voice", () => {
+    const [match] = extractMatches("$HEX")
+    const identified = identifyFast(match, { chainBias: "pulsechain" })
+    expect(identified.chain).toBe("pulsechain")
+    expect(identified.coingeckoId).toBeNull()
+    expect(identified.contractAddress).toBe("0x2b591e99afe9f32eaa6214f7b7629768c40eeb39")
+    expect(identified.resolutionStatus).toBe("resolved")
+    expect(identified.geckoterminalNetwork).toBe("pulsechain")
+  })
+
   it("does not treat a slice of an EVM address as a Solana mint", () => {
     const mixed = "0x6982508145454Ce325dDbE47a25d4ec3d2311933"
     const matches = extractMatches(`adding the pepe contract ${mixed}`)
