@@ -10,7 +10,7 @@ import type { FeedDTO, QuoteDTO } from "@/lib/types"
 import { formatRoi, formatUsd, roiClass } from "@/lib/format"
 import { Clock } from "./animated-number"
 import { LiveProvider, useLive } from "./live-provider"
-import { TrackVoiceDialog } from "./voice-actions"
+import { TrackVoiceButton } from "./track-voice-button"
 
 const LINKS = [
   { href: "/", label: "Tape", icon: Activity },
@@ -57,7 +57,7 @@ export function AppFrame({
               <LiveDot />
               <Clock />
               <div className="hidden sm:block">
-                <TrackVoiceDialog />
+                <TrackVoiceButton />
               </div>
             </div>
           </div>

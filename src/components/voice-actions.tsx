@@ -26,9 +26,9 @@ import {
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
-export function TrackVoiceDialog() {
+export function TrackVoiceDialog({ defaultOpen = false }: { defaultOpen?: boolean } = {}) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [state, action, pending] = useActionState(
     async (prev: ActionState, formData: FormData) => {
       const result = await trackVoice(prev, formData)
