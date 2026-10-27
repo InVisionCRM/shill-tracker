@@ -10,6 +10,7 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:check": "tsx scripts/check-migrations.ts",
     "db:seed": "tsx scripts/seed.ts",
     "test": "vitest run",
     "verify:prices": "tsx scripts/verify-prices.ts",

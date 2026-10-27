@@ -3,6 +3,9 @@ import { loadLocalEnv } from "../src/lib/env"
 
 loadLocalEnv()
 
+const check = spawnSync("pnpm", ["exec", "tsx", "scripts/check-migrations.ts"], { stdio: "inherit", env: process.env })
+if (check.status !== 0) process.exit(check.status ?? 1)
+
 const migrateUrl = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL
 const onVercel = process.env.VERCEL === "1"
 

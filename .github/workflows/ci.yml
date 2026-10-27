@@ -28,6 +28,7 @@ jobs:
           # package-lock.json, so the pnpm store is the cache that actually hits.
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx scripts/check-migrations.ts
       - run: pnpm lint
       - run: pnpm exec next typegen
       - run: pnpm exec tsc --noEmit
