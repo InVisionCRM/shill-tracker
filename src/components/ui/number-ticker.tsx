@@ -21,12 +21,14 @@ export function NumberTicker({
   const ref = useRef<HTMLSpanElement>(null)
   const reduce = useReducedMotion()
   const formatted = new Intl.NumberFormat("en-US").format(Math.round(value))
+  // Server HTML and no-JS visitors see the real value. The count-up only starts once in view.
   const motionValue = useMotionValue(0)
   const spring = useSpring(motionValue, { damping: 40, stiffness: 140 })
   const inView = useInView(ref, { once: true, margin: "0px" })
 
   useEffect(() => {
     if (reduce || !inView) return
+    motionValue.jump(0)
     const timer = window.setTimeout(() => motionValue.set(value), delay * 1000)
     return () => window.clearTimeout(timer)
   }, [reduce, inView, motionValue, value, delay])
@@ -46,7 +48,7 @@ export function NumberTicker({
       style={{ minWidth: `${Math.max(formatted.length, 1)}ch` }}
       aria-label={formatted}
     >
-      {reduce ? formatted : "0"}
+      {formatted}
     </span>
   )
 }

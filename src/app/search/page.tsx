@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import Link from "next/link"
 import { connection } from "next/server"
+import { SearchBox } from "@/components/search-box"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { searchAll } from "@/lib/queries"
 import { formatRoi, roiClass } from "@/lib/format"
@@ -13,9 +14,17 @@ export default function SearchPage({
   searchParams: Promise<{ q?: string }>
 }) {
   return (
-    <Suspense fallback={<p className="text-sm text-muted-foreground">Searching…</p>}>
-      <Results searchParams={searchParams} />
-    </Suspense>
+    <div className="flex flex-col gap-6">
+      <header>
+        <h1 className="text-3xl font-semibold tracking-tight">Search</h1>
+        <Suspense fallback={<div className="mt-4 h-10 max-w-lg rounded-lg border bg-card" aria-hidden />}>
+          <SearchBox />
+        </Suspense>
+      </header>
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Searching…</p>}>
+        <Results searchParams={searchParams} />
+      </Suspense>
+    </div>
   )
 }
 
@@ -26,18 +35,6 @@ async function Results({ searchParams }: { searchParams: Promise<{ q?: string }>
   const result = query ? await searchAll(query) : { influencers: [], mentions: [] }
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <h1 className="text-3xl font-semibold tracking-tight">Search</h1>
-        <form action="/search" className="mt-4">
-          <input
-            name="q"
-            defaultValue={query}
-            placeholder="@voice or $ticker"
-            aria-label="Search"
-            className="h-10 w-full max-w-lg rounded-lg border bg-card px-3 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40"
-          />
-        </form>
-      </header>
       {!query ? (
         <p className="text-sm text-muted-foreground">Try a handle or a symbol.</p>
       ) : result.influencers.length + result.mentions.length === 0 ? (

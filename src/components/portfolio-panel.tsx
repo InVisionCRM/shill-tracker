@@ -65,13 +65,13 @@ export function PortfolioPanel({
           ))}
         </ToggleGroup>
       </div>
+      <EquityChart points={curve.points} />
       {stored ? (
         <p className="text-xs leading-5 text-muted-foreground">
-          The dollar figure is the stored {noun} book. This page does not download every stake.
+          The dollar figure is the stored {noun} book. The curve plots the {positions.length} most recent stakes loaded
+          on this page.
         </p>
-      ) : (
-        <EquityChart points={curve.points} />
-      )}
+      ) : null}
       <p className="text-xs leading-5 text-muted-foreground">
         Each {noun} is a separate $100 stake at the post-time candle. No fees, no size limits, no overlap netting.
         A post that names two assets is two stakes. Seed paths stay illustrative. Live paths use the latest mark
