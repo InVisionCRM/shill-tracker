@@ -25,9 +25,12 @@ jobs:
           test -n "$APP_URL"
           test -n "$CRON_SECRET"
           base="${APP_URL%/}"
-          curl --fail-with-body -sS --max-time 40 -X POST \
+          out=$(curl --fail-with-body -sS --max-time 58 -X POST \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${base}/api/cron/prices"
+            "${base}/api/cron/prices")
+          # Vercel's login page answers 200, so require the job's JSON, not just a 2xx.
+          echo "$out" | head -c 2000
+          echo "$out" | grep -q '"ok":true' || { echo "price job did not return ok:true"; exit 1; }
           # Even 30-minute buckets of the Unix epoch are the :00 UTC hour.
           # A manual run always refreshes scores. Half-hour schedule ticks do not.
           bucket=$(( $(date -u +%s) / 1800 ))

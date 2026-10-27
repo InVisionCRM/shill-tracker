@@ -19,11 +19,14 @@ export const WPLS = "0xa1077a294dde1b09bb078844df40758a5d0f9a27"
 export const WPLS_USDC_PAIR = "0x6753560538eca67617a9ce605178f788be7e524e"
 export const USDC = "0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07"
 
+/**
+ * $1 stablecoins on PulseChain are the bridged ones. The forked copies of Ethereum DAI/USDC/USDT
+ * (pDAI and friends) trade far below $1 and must never be treated as stable.
+ */
 const STABLES = new Set([
-  "0x6b175474e89094c44da98b954eedeac495271d0f",
-  "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
   USDC,
-  "0xdac17f958d2ee523a2206206994597c13d831ec7",
+  "0xefd766ccb38eaf1dfd701853bfce31359239f305",
+  "0x0cb6f5a34ad42ec934882a05265a7d5f59b51a2f",
 ])
 
 const FACTORIES = [

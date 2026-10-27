@@ -36,6 +36,13 @@
       "when": 1793230000000,
       "tag": "0004_pulse_directory",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793141618310,
+      "tag": "0005_price_match",
+      "breakpoints": true
     }
   ]
 }

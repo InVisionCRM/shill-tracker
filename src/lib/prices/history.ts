@@ -41,6 +41,7 @@ export async function fetchHistory(
   fromMs: number,
   toMs: number,
   postedAt = fromMs,
+  options?: { skipOnchain?: boolean },
 ): Promise<{ candles: Candle[]; source: "binance" | "coingecko" | "geckoterminal" | "pulsex" }> {
   const errors: string[] = []
   const olderThanGt = fromMs < Date.now() - GT_HISTORY_MS
@@ -49,7 +50,7 @@ export async function fetchHistory(
   // state for old blocks, so an on-chain miss falls through to the free APIs. If none of them has real
   // data either, the price stays unverifiable. Nothing is ever estimated.
   let pulseUnverifiable = false
-  if (target.chain === "pulsechain" && target.contractAddress) {
+  if (!options?.skipOnchain && target.chain === "pulsechain" && target.contractAddress) {
     const localPairs = await pulsePairsFor(target.contractAddress)
     const atBlock = estimatePulseBlock(Math.floor(postedAt / 1000))
     const pulsex = pickPulsexPair(localPairs, atBlock)
@@ -173,7 +174,7 @@ async function geckoTerminalOhlcv(network: string, pool: string, fromMs: number,
     const url = `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${poolId}/ohlcv/hour?aggregate=1&limit=1000&currency=usd&before_timestamp=${before}`
     const body = await fetchJson<GtResponse>(url, {
       headers: { accept: "application/json;version=20230302" },
-      minIntervalMs: 1300,
+      minIntervalMs: 2100,
       timeoutMs: 12_000,
     })
     const rows = body.data?.attributes?.ohlcv_list ?? []

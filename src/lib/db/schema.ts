@@ -98,6 +98,11 @@ export const mentions = pgTable(
     /** dead or rugged. Null while the asset still has a pool. */
     assetState: text("asset_state"),
     priceSource: text("price_source"),
+    /** exact, nearest_candle, or nearest_daily_close. Worst match across entry and settled horizons. */
+    priceMatch: text("price_match"),
+    /** Timestamp of the candle actually used for the entry price. */
+    priceAtTs: timestamp("price_at_ts", { withTimezone: true }),
+    priceMatches: jsonb("price_matches").$type<Partial<Record<string, { m: string; ts: number }>>>(),
     priceAt: doublePrecision("price_at"),
     price1h: doublePrecision("price_1h"),
     price24h: doublePrecision("price_24h"),
@@ -141,6 +146,7 @@ export const mentions = pgTable(
     index("mentions_symbol_idx").on(t.symbol),
     index("mentions_asset_key_idx").on(t.assetKey),
     index("mentions_price_status_idx").on(t.priceStatus),
+    index("mentions_price_match_idx").on(t.priceMatch),
     index("mentions_created_idx").on(t.createdAt),
   ],
 )

@@ -1,4 +1,6 @@
 const lastCall = new Map<string, number>()
+/** After repeated 429s a host rests for a while, so one run does not burn its budget on retries. */
+const cooldownUntil = new Map<string, number>()
 
 export function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -13,6 +15,8 @@ export async function fetchJson<T>(
   },
 ): Promise<T> {
   const host = new URL(url).host
+  const resting = cooldownUntil.get(host) ?? 0
+  if (resting > Date.now()) throw new Error(`429 cooldown ${host}`)
   const minInterval = init?.minIntervalMs ?? 0
   const wait = (lastCall.get(host) ?? 0) + minInterval - Date.now()
   if (wait > 0) await sleep(wait)
@@ -62,6 +66,7 @@ export async function fetchJson<T>(
       clearTimeout(timer)
     }
   }
+  if (lastError?.message.startsWith("429")) cooldownUntil.set(host, Date.now() + 45_000)
   throw lastError ?? new Error(`failed ${url}`)
 }
 

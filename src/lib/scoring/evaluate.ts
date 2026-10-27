@@ -74,6 +74,23 @@ export type EvaluatedCall = {
   pumpDumpFlag: boolean
   pumpDumpReasons: string[]
   priceStatus: "partial" | "ready" | "unavailable" | "unverifiable"
+  /** Worst match among the entry and settled horizons. Null when no price was found. */
+  priceMatch: PriceMatch | null
+  /** Timestamp (ms) of the candle actually used as the entry price. */
+  priceAtTs: number | null
+  priceMatches: Partial<Record<MatchSlot, { m: PriceMatch; ts: number }>>
+}
+
+export type PriceMatch = "exact" | "nearest_candle" | "nearest_daily_close"
+export type MatchSlot = "at" | "1h" | "24h" | "7d" | "30d" | "now"
+const MATCH_RANK: Record<PriceMatch, number> = { exact: 0, nearest_candle: 1, nearest_daily_close: 2 }
+
+/** Within 65 minutes of the target is the hourly candle that covers it. 12h or more is a daily close. */
+export function matchTypeFor(gapMs: number): PriceMatch {
+  const abs = Math.abs(gapMs)
+  if (abs <= 65 * 60 * 1000) return "exact"
+  if (abs >= 12 * 60 * 60 * 1000) return "nearest_daily_close"
+  return "nearest_candle"
 }
 
 /** A dead or rugged asset is -100% from the first real entry. No entry means unverifiable. */
@@ -110,6 +127,10 @@ export function ramp(value: number, floor: number, ceil: number) {
 }
 
 export function priceAt(candles: Candle[], time: number) {
+  return priceAtDetail(candles, time)?.p ?? null
+}
+
+export function priceAtDetail(candles: Candle[], time: number): { p: number; t: number } | null {
   if (!candles.length) return null
   let low = 0
   let high = candles.length - 1
@@ -125,7 +146,7 @@ export function priceAt(candles: Candle[], time: number) {
   }
   if (found < 0) return null
   if (time - candles[found].t > WEIGHTS.candleGapMs) return null
-  return candles[found].p
+  return { p: candles[found].p, t: candles[found].t }
 }
 
 function roi(entry: number | null, exit: number | null) {
@@ -255,16 +276,23 @@ export function evaluateCall(input: {
   const now = input.now ?? Date.now()
   const postedAt = input.postedAt
   const candles = [...input.candles].sort((a, b) => a.t - b.t)
-  const entry = priceAt(candles, postedAt)
+  const priceMatches: EvaluatedCall["priceMatches"] = {}
+  const detail = (slot: MatchSlot, time: number) => {
+    const hit = priceAtDetail(candles, time)
+    if (!hit) return null
+    priceMatches[slot] = { m: matchTypeFor(time - hit.t), ts: hit.t }
+    return hit.p
+  }
+  const entry = detail("at", postedAt)
 
   const due = (ms: number) => now >= postedAt + ms
-  const at = (ms: number) => (due(ms) ? priceAt(candles, postedAt + ms) : null)
+  const at = (slot: MatchSlot, ms: number) => (due(ms) ? detail(slot, postedAt + ms) : null)
 
-  const price1h = at(HOUR)
-  const price24h = at(24 * HOUR)
-  const price7d = at(7 * 24 * HOUR)
-  const price30d = at(30 * 24 * HOUR)
-  const priceNow = priceAt(candles, now)
+  const price1h = at("1h", HOUR)
+  const price24h = at("24h", 24 * HOUR)
+  const price7d = at("7d", 7 * 24 * HOUR)
+  const price30d = at("30d", 30 * 24 * HOUR)
+  const priceNow = detail("now", now)
   const price24hBefore = priceAt(candles, postedAt - 24 * HOUR)
   const price7dBefore = priceAt(candles, postedAt - 7 * 24 * HOUR)
 
@@ -338,7 +366,20 @@ export function evaluateCall(input: {
     pumpDumpFlag: pump.flag,
     pumpDumpReasons: pump.reasons,
     priceStatus,
+    priceMatch: worstMatch(priceMatches),
+    priceAtTs: priceMatches.at?.ts ?? null,
+    priceMatches,
   }
+}
+
+function worstMatch(matches: EvaluatedCall["priceMatches"]): PriceMatch | null {
+  let worst: PriceMatch | null = null
+  for (const slot of ["at", "1h", "24h", "7d", "30d"] as const) {
+    const hit = matches[slot]
+    if (!hit) continue
+    if (worst == null || MATCH_RANK[hit.m] > MATCH_RANK[worst]) worst = hit.m
+  }
+  return worst
 }
 
 export function downsample(candles: Candle[], max = 220) {

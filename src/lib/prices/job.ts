@@ -3,7 +3,8 @@ import { canonicalBySymbol } from "../detect/assets"
 import { PULSE_BOOK, dexUrl } from "../detect/pulse"
 import { getDb } from "../db"
 import { cronRuns, influencers, mentions, quotes } from "../db/schema"
-import { priceFromCache } from "./backlog"
+import { priceFromCache, sourceOf } from "./backlog"
+import { onchainCallCount } from "./onchain"
 import { callRankWindow } from "../scoring/call-rank"
 import { getPricingProgress } from "../queries"
 import { assetKeyOf } from "../format"
@@ -27,13 +28,30 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
   const limit = Math.min(Math.max(requested, 1), inline ? 20 : 800)
   const detail: Record<string, unknown> = { resolved: 0, priced: 0, failed: 0, quotes: 0, candleFetches: 0 }
   const touched = new Set<string>()
+  const budgetMs = options?.budgetMs ?? 42_000
+  const dedupeIds: string[] = []
+  const summary = {
+    attempted: 0,
+    priced: 0,
+    unverifiable: 0,
+    dead: 0,
+    errorsBySource: {} as Record<string, number>,
+    resolveGroups: 0,
+    resolveGroupsPending: 0,
+    assets: 0,
+    onchainAssets: 0,
+    fetches: 0,
+    rpcBatches: 0,
+    durationMs: 0,
+  }
+  const rpcStart = onchainCallCount()
 
   try {
     if (!inline) {
       const pulseResolved = await applyPulseBias()
       detail.resolved = pulseResolved
     }
-    const resolveLimit = inline ? limit : Math.min(6, limit)
+    const resolveLimit = inline ? limit : 4000
     const pendingIds = options?.mentionIds?.length
       ? options.mentionIds.slice(0, resolveLimit)
       : resultRows<{ id: string }>(
@@ -76,16 +94,37 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
       : []
     const biasOf = new Map(voices.map((voice) => [voice.id, voice.chainBias]))
 
+    // Group by what the resolver needs, so one network lookup resolves every mention of a token.
+    type Pending = (typeof pending)[number]
+    const groups = new Map<string, { hint: string | null; mentions: Pending[]; curated: ReturnType<typeof lookupOverride> }>()
     for (const mention of pending) {
+      const bias = biasOf.get(mention.influencerId) ?? null
+      const hint = mention.chain && mention.chain !== "unknown-evm" ? mention.chain : bias
+      const curated = lookupOverride({
+        symbol: mention.symbol,
+        postedAt: mention.createdAt,
+        chainHint: mention.chain,
+        chainBias: bias,
+      })
+      const key = curated
+        ? `o:${assetKeyOf(curated)}`
+        : mention.contractAddress
+          ? `c:${mention.contractAddress.toLowerCase()}|${hint ?? ""}`
+          : mention.symbol
+            ? `s:${mention.symbol.toUpperCase()}|${hint ?? ""}`
+            : `x:${mention.id}`
+      const group = groups.get(key) ?? { hint, mentions: [], curated }
+      group.mentions.push(mention)
+      groups.set(key, group)
+    }
+    const resolveBudgetMs = inline ? 20_000 : Math.round(budgetMs * 0.4)
+    let resolvedGroups = 0
+    for (const group of groups.values()) {
+      if (Date.now() - started.getTime() > resolveBudgetMs) break
+      const first = group.mentions[0]
+      const ids = group.mentions.map((mention) => mention.id)
       try {
-        const bias = biasOf.get(mention.influencerId) ?? null
-        const hint = mention.chain && mention.chain !== "unknown-evm" ? mention.chain : bias
-        const curated = lookupOverride({
-          symbol: mention.symbol,
-          postedAt: mention.createdAt,
-          chainHint: mention.chain,
-          chainBias: bias,
-        })
+        const curated = group.curated
         const resolved = curated
           ? {
               symbol: curated.symbol,
@@ -104,23 +143,24 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
               resolutionStatus: "resolved" as const,
               assetState: null,
             }
-          : mention.contractAddress
-            ? await resolveContract(mention.contractAddress, hint)
-            : mention.symbol
-              ? await resolveSymbol(mention.symbol, hint)
+          : first.contractAddress
+            ? await resolveContract(first.contractAddress, group.hint)
+            : first.symbol
+              ? await resolveSymbol(first.symbol, group.hint)
               : null
         if (!resolved) continue
         const known = resolved.symbol ? canonicalBySymbol(resolved.symbol) : null
+        const unresolvedEvm = resolved.chain === "unknown-evm" && resolved.resolutionStatus === "pending"
         await db
           .update(mentions)
           .set({
-            symbol: resolved.symbol ?? mention.symbol,
+            symbol: resolved.symbol ?? first.symbol,
             assetName: resolved.assetName,
             assetKey: resolved.assetKey,
             coingeckoId: resolved.coingeckoId ?? known?.id ?? null,
             binanceSymbol: known?.binance ?? resolved.binanceSymbol,
-            chain: resolved.chain ?? mention.chain,
-            contractAddress: resolved.contractAddress ?? mention.contractAddress,
+            chain: resolved.chain ?? first.chain,
+            contractAddress: resolved.contractAddress ?? first.contractAddress,
             pairAddress: resolved.pairAddress,
             dexscreenerUrl: resolved.dexscreenerUrl,
             geckoterminalNetwork: resolved.geckoterminalNetwork,
@@ -129,34 +169,41 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
             resolutionConfidence: resolved.resolutionConfidence,
             resolutionStatus: resolved.resolutionStatus,
             assetState: resolved.assetState,
-            priceStatus:
-              resolved.assetState === "dead" && !resolved.pairAddress
-                ? "unverifiable"
-                : resolved.resolutionStatus === "unresolved"
-                  ? "unavailable"
-                  : mention.priceStatus,
-            priceAttempts:
-              resolved.chain === "unknown-evm" && resolved.resolutionStatus === "pending"
-                ? mention.priceAttempts + 1
-                : mention.priceAttempts,
+            ...(resolved.assetState === "dead" && !resolved.pairAddress
+              ? { priceStatus: "unverifiable" }
+              : resolved.resolutionStatus === "unresolved"
+                ? { priceStatus: "unavailable" }
+                : {}),
+            ...(unresolvedEvm ? { priceAttempts: sql`${mentions.priceAttempts} + 1` } : {}),
             updatedAt: new Date(),
           })
-          .where(eq(mentions.id, mention.id))
-        detail.resolved = Number(detail.resolved) + 1
-        touched.add(mention.influencerId)
-        await dedupePost(mention.postId)
+          .where(inArray(mentions.id, ids))
+        resolvedGroups += 1
+        detail.resolved = Number(detail.resolved) + ids.length
+        if (resolved.assetState === "dead") summary.dead += ids.length
+        for (const mention of group.mentions) touched.add(mention.influencerId)
+        dedupeIds.push(...group.mentions.map((mention) => mention.postId))
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        const source = sourceOf(message)
+        summary.errorsBySource[source] = (summary.errorsBySource[source] ?? 0) + 1
         detail.failed = Number(detail.failed) + 1
+        // Rate limits and timeouts are ours to retry. They do not count against the mention.
+        const transient = /429|cooldown|abort|timeout|5\d\d from/i.test(message)
         await db
           .update(mentions)
           .set({
-            priceError: error instanceof Error ? error.message : String(error),
-            priceAttempts: mention.priceAttempts + 1,
+            priceError: message,
+            ...(transient ? {} : { priceAttempts: sql`${mentions.priceAttempts} + 1` }),
             updatedAt: new Date(),
           })
-          .where(eq(mentions.id, mention.id))
+          .where(inArray(mentions.id, ids))
+        if (/429|cooldown/i.test(message) && source === "coingecko") break
       }
     }
+    summary.resolveGroups = resolvedGroups
+    summary.resolveGroupsPending = groups.size - resolvedGroups
+    if (dedupeIds.length) await dedupePosts([...new Set(dedupeIds)])
 
     if (inline) {
     const history = await db
@@ -216,6 +263,9 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
           .update(mentions)
           .set({
             priceSource: source,
+            priceMatch: evaluated.priceMatch,
+            priceAtTs: evaluated.priceAtTs != null ? new Date(evaluated.priceAtTs) : null,
+            priceMatches: evaluated.priceMatches,
             priceAt: evaluated.priceAt,
             price1h: evaluated.price1h,
             price24h: evaluated.price24h,
@@ -269,13 +319,22 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
     } else {
       const backlog = await priceFromCache({
         limit,
-        budgetMs: options?.budgetMs ?? 35_000,
-        assetFetches: 2,
+        budgetMs,
         startedAt: started.getTime(),
       })
       detail.priced = Number(detail.priced) + backlog.priced
       detail.failed = Number(detail.failed) + backlog.failed
       detail.candleFetches = backlog.fetches
+      summary.attempted = backlog.attempted
+      summary.priced = backlog.priced
+      summary.unverifiable += backlog.unverifiable
+      summary.dead += backlog.dead
+      summary.assets = backlog.assets
+      summary.onchainAssets = backlog.onchainAssets
+      summary.fetches = backlog.fetches
+      for (const [source, count] of Object.entries(backlog.errorsBySource)) {
+        summary.errorsBySource[source] = (summary.errorsBySource[source] ?? 0) + count
+      }
       for (const id of backlog.touched) touched.add(id)
     }
 
@@ -283,6 +342,10 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
     if (touched.size) await recomputeInfluencers([...touched])
     const progress = await getPricingProgress()
     detail.progress = progress
+    summary.rpcBatches = onchainCallCount() - rpcStart
+    summary.durationMs = Date.now() - started.getTime()
+    detail.summary = summary
+    console.log(`price-run ${JSON.stringify(summary)}`)
     await db.insert(cronRuns).values({
       job: "prices",
       startedAt: started,
@@ -304,22 +367,23 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
   }
 }
 
-async function dedupePost(postId: string) {
+async function dedupePosts(postIds: string[]) {
   const db = getDb()
-  const rows = await db.select().from(mentions).where(eq(mentions.postId, postId))
-  const groups = new Map<string, typeof rows>()
-  for (const row of rows) {
-    const key = row.assetKey ?? (row.symbol ? `sym:${row.symbol}` : row.matchKey)
-    const group = groups.get(key) ?? []
-    group.push(row)
-    groups.set(key, group)
-  }
-  for (const group of groups.values()) {
-    if (group.length < 2) continue
-    const ranked = [...group].sort((a, b) => scoreRow(b) - scoreRow(a))
-    const keep = ranked[0]
-    const drop = ranked.slice(1)
-    if (drop.length) {
+  for (let start = 0; start < postIds.length; start += 500) {
+    const slice = postIds.slice(start, start + 500)
+    const rows = await db.select().from(mentions).where(inArray(mentions.postId, slice))
+    const groups = new Map<string, typeof rows>()
+    for (const row of rows) {
+      const key = `${row.postId}|${row.assetKey ?? (row.symbol ? `sym:${row.symbol}` : row.matchKey)}`
+      const group = groups.get(key) ?? []
+      group.push(row)
+      groups.set(key, group)
+    }
+    for (const group of groups.values()) {
+      if (group.length < 2) continue
+      const ranked = [...group].sort((a, b) => scoreRow(b) - scoreRow(a))
+      const keep = ranked[0]
+      const drop = ranked.slice(1)
       await db.delete(mentions).where(inArray(mentions.id, drop.map((row) => row.id)))
       const extras = drop.map((row) => row.rawText).join(", ")
       await db

@@ -9,8 +9,8 @@ async function handle(request: Request) {
   if (denied) return denied
   const url = new URL(request.url)
   const raw = url.searchParams.get("limit")
-  const parsed = raw == null ? 400 : Number(raw)
-  const limit = Number.isFinite(parsed) ? parsed : 400
+  const parsed = raw == null ? 800 : Number(raw)
+  const limit = Number.isFinite(parsed) ? parsed : 800
   try {
     const result = await runPriceJob({ limit })
     return Response.json(result)
