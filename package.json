@@ -19,12 +19,6 @@
     "import:pulsechain": "tsx scripts/import-pulsechain-directory.ts",
     "prices:backlog": "tsx scripts/price-backlog.ts"
   },
-  "browserslist": [
-    "chrome 111",
-    "edge 111",
-    "firefox 111",
-    "safari 16.4"
-  ],
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",

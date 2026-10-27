@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { Geist, Geist_Mono } from "next/font/google"
 import { ThemeProvider } from "next-themes"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { LazyToaster } from "@/components/lazy-client"
+import { Toaster } from "@/components/ui/sonner"
 import { AppFrame } from "@/components/shell"
 import "./globals.css"
 
@@ -37,7 +37,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <ThemeProvider attribute="class" forcedTheme="dark" enableSystem={false}>
           <TooltipProvider>
             <AppFrame quotes={[]} latest={[]}>{children}</AppFrame>
-            <LazyToaster />
+            <Toaster />
           </TooltipProvider>
         </ThemeProvider>
       </body>
