@@ -89,7 +89,13 @@ export const mentions = pgTable(
     geckoterminalNetwork: text("geckoterminal_network"),
     confidence: text("confidence").notNull().default("low"),
     confidenceReason: text("confidence_reason"),
+    /** high, medium, low, or ambiguous. */
+    resolutionConfidence: text("resolution_confidence"),
     resolutionStatus: text("resolution_status").notNull().default("pending"),
+    /** call, retro_brag, commentary, negative, joke. Only call is scored. */
+    callKind: text("call_kind").notNull().default("call"),
+    /** dead or rugged. Null while the asset still has a pool. */
+    assetState: text("asset_state"),
     priceSource: text("price_source"),
     priceAt: doublePrecision("price_at"),
     price1h: doublePrecision("price_1h"),

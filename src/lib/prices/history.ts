@@ -1,6 +1,13 @@
 import type { Candle } from "../scoring/evaluate"
 import { CHAIN_TO_GECKOTERMINAL } from "../detect/assets"
 import { coingeckoConfig, fetchJson } from "./http"
+import { fetchPulsexCandles, isUnverifiable, UnverifiablePriceError } from "./pulsex"
+
+const DAY = 24 * 60 * 60 * 1000
+const GT_HISTORY_MS = 170 * DAY
+const CG_HISTORY_MS = 360 * DAY
+
+export { isUnverifiable, UnverifiablePriceError }
 
 const HOUR = 60 * 60 * 1000
 
@@ -28,11 +35,14 @@ type HistoryTarget = {
 }
 
 export async function fetchHistory(
-  target: HistoryTarget,
+  target: HistoryTarget & { contractAddress?: string | null },
   fromMs: number,
   toMs: number,
-): Promise<{ candles: Candle[]; source: "binance" | "coingecko" | "geckoterminal" }> {
+  postedAt = fromMs,
+): Promise<{ candles: Candle[]; source: "binance" | "coingecko" | "geckoterminal" | "pulsex" }> {
   const errors: string[] = []
+  const olderThanGt = fromMs < Date.now() - GT_HISTORY_MS
+  const olderThanCg = fromMs < Date.now() - CG_HISTORY_MS
   if (target.binanceSymbol) {
     try {
       return { candles: await binanceKlines(target.binanceSymbol, fromMs, toMs), source: "binance" }
@@ -40,7 +50,7 @@ export async function fetchHistory(
       errors.push(error instanceof Error ? error.message : String(error))
     }
   }
-  if (target.coingeckoId) {
+  if (target.coingeckoId && !olderThanCg) {
     try {
       return {
         candles: await coingeckoRange(target.coingeckoId, fromMs, toMs),
@@ -49,19 +59,49 @@ export async function fetchHistory(
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error))
     }
+  } else if (target.coingeckoId && olderThanCg) {
+    errors.push("CoinGecko free history does not cover this date")
   }
   const network =
     target.geckoterminalNetwork ??
     (target.chain ? CHAIN_TO_GECKOTERMINAL[target.chain] : null)
-  if (network && target.pairAddress) {
+  if (network && target.pairAddress && !olderThanGt) {
     try {
       return {
         candles: await geckoTerminalOhlcv(network, target.pairAddress, fromMs, toMs),
         source: "geckoterminal",
       }
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      errors.push(message)
+      if (!message.startsWith("401") && !olderThanGt) {
+        // A fresh GeckoTerminal failure can be retried. An old 401 falls through.
+      }
+    }
+  } else if (network && target.pairAddress && olderThanGt) {
+    errors.push("GeckoTerminal free OHLCV does not cover this date")
+  }
+  if (target.chain === "pulsechain" && target.pairAddress && target.contractAddress) {
+    try {
+      const candles = await fetchPulsexCandles({
+        token: target.contractAddress,
+        pair: target.pairAddress,
+        postedAt,
+        fromMs,
+        toMs,
+      })
+      if (candles.length) return { candles, source: "pulsex" }
+    } catch (error) {
+      if (isUnverifiable(error)) {
+        throw new UnverifiablePriceError(error instanceof Error ? error.message : String(error))
+      }
       errors.push(error instanceof Error ? error.message : String(error))
     }
+  }
+  if (olderThanGt || olderThanCg) {
+    throw new UnverifiablePriceError(
+      errors.join(" | ") || "No free history covers this date, and on-chain reserves were not available. Not estimated.",
+    )
   }
   throw new Error(errors.join(" | ") || "no price source for this asset")
 }

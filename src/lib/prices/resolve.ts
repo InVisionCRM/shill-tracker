@@ -17,7 +17,11 @@ export type ResolvedAsset = {
   geckoterminalNetwork: string | null
   confidence: "high" | "medium" | "low"
   confidenceReason: string
+  /** high, medium, low, or ambiguous when two listings could both be right. */
+  resolutionConfidence: "high" | "medium" | "low" | "ambiguous"
   resolutionStatus: "resolved" | "pending" | "unresolved"
+  /** dead = no pairs or empty reserves. rugged = it traded, then liquidity went to zero. */
+  assetState: "dead" | "rugged" | null
   assetKey: string | null
 }
 
@@ -118,30 +122,38 @@ export function pickEvmPair<T extends { chainId?: string | null; liquidity?: { u
   return ranked[0]
 }
 
-/** Pair choice for an 0x contract. Empty input stays unknown-evm so a later pass can try again. */
-export function resolveEvmContract(address: string, pairs: DexPair[]): ResolvedAsset {
+/** Pair choice for an 0x contract. A real chain hint beats the PulseChain-first default. */
+export function resolveEvmContract(address: string, pairs: DexPair[], chainHint?: string | null): ResolvedAsset {
   const normalized = address.startsWith("0x") ? address.toLowerCase() : address
   const matching = pairs.filter((pair) => baseMatches(pair, normalized))
-  const best = pickEvmPair(matching)
-  if (!best) {
+  const hint = chainHint && chainHint !== "unknown-evm" ? canonicalChain(chainHint) ?? chainHint : null
+  const hinted = hint
+    ? [...matching]
+        .filter((pair) => canonicalChain(pair.chainId) === hint)
+        .sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0]
+    : undefined
+  const best = hinted && (hinted.liquidity?.usd ?? 0) > 0 ? hinted : pickEvmPair(matching)
+  const liquidity = best?.liquidity?.usd ?? 0
+  if (!best || liquidity <= 0) {
     return pack({
-      symbol: null,
-      assetName: null,
+      symbol: best?.baseToken?.symbol?.toUpperCase() ?? null,
+      assetName: best?.baseToken?.name ?? null,
       coingeckoId: null,
       binanceSymbol: null,
-      chain: "unknown-evm",
+      chain: hint ?? "unknown-evm",
       contractAddress: normalized,
       pairAddress: null,
       dexscreenerUrl: null,
       geckoterminalNetwork: null,
       confidence: "low",
+      resolutionConfidence: "low",
+      assetState: "dead",
       confidenceReason:
-        "No PulseChain, Ethereum, Base, or BSC pair yet. Stored as unknown-evm so a later pass can resolve the chain.",
-      resolutionStatus: "pending",
+        "No pair with liquidity. The asset is dead. Price stays unverifiable and is never estimated.",
+      resolutionStatus: "resolved",
     })
   }
-  const chain = canonicalChain(best.chainId) ?? "unknown-evm"
-  const liquidity = best.liquidity?.usd ?? 0
+  const chain = canonicalChain(best.chainId) ?? hint ?? "unknown-evm"
   const confidence = liquidity >= 100_000 ? "high" : liquidity >= 20_000 ? "medium" : "low"
   return pack({
     symbol: best.baseToken?.symbol?.toUpperCase() ?? null,
@@ -195,7 +207,7 @@ function confidenceFromCaps(top: number, second: number | null): "high" | "mediu
   return "low"
 }
 
-export async function resolveSymbol(symbol: string): Promise<ResolvedAsset> {
+export async function resolveSymbol(symbol: string, hintedChain?: string | null): Promise<ResolvedAsset> {
   const cg = coingeckoConfig()
   const search = await cached(`cg-search:${symbol}`, 12 * 60 * 60 * 1000, () =>
     fetchJson<CgSearch>(`${cg.base}/search?query=${encodeURIComponent(symbol)}`, {
@@ -253,7 +265,7 @@ export async function resolveSymbol(symbol: string): Promise<ResolvedAsset> {
     }
   }
 
-  const dex = await searchDex(symbol)
+  const dex = await searchDex(symbol, hintedChain)
   if (dex) return dex
   return pack({
     symbol: symbol.toUpperCase(),
@@ -282,7 +294,8 @@ export async function resolveContract(address: string, _hintedChain?: string | n
       if (!pickEvmPair(pairs.filter((pair) => baseMatches(pair, normalized)))) throw error
     }
   }
-  return resolveEvmContract(normalized, pairs)
+  const hint = _hintedChain && _hintedChain !== "unknown-evm" ? _hintedChain : null
+  return resolveEvmContract(normalized, pairs, hint)
 }
 
 async function loadDexPairs(address: string) {
@@ -335,7 +348,7 @@ function networkFromPoolId(id: string) {
   return id.slice(0, marker).toLowerCase()
 }
 
-async function searchDex(symbol: string): Promise<ResolvedAsset | null> {
+async function searchDex(symbol: string, hintedChain?: string | null): Promise<ResolvedAsset | null> {
   const data = await cached(`dex-search:${symbol}`, 60 * 60 * 1000, () =>
     fetchJson<{ pairs?: DexPair[] | null }>(
       `https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(symbol)}`,
@@ -345,7 +358,15 @@ async function searchDex(symbol: string): Promise<ResolvedAsset | null> {
   const pairs = (data.pairs ?? []).filter(
     (pair) => pair.baseToken?.symbol?.toUpperCase() === symbol.toUpperCase(),
   )
-  const best = [...pairs].sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0]
+  const hint = hintedChain && hintedChain !== "unknown-evm" ? hintedChain : null
+  const hinted = hint
+    ? [...pairs]
+        .filter((pair) => canonicalChain(pair.chainId) === canonicalChain(hint))
+        .sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0]
+    : undefined
+  const best = hinted && (hinted.liquidity?.usd ?? 0) > 0
+    ? hinted
+    : [...pairs].sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0]
   if (!best || (best.liquidity?.usd ?? 0) < 5_000) return null
   const liquidity = best.liquidity?.usd ?? 0
   const confidence = liquidity >= 250_000 ? "medium" : "low"
@@ -366,8 +387,20 @@ async function searchDex(symbol: string): Promise<ResolvedAsset | null> {
   })
 }
 
-function pack(asset: Omit<ResolvedAsset, "assetKey">): ResolvedAsset {
-  return { ...asset, assetKey: assetKeyOf(asset) }
+function pack(
+  asset: Omit<ResolvedAsset, "assetKey" | "resolutionConfidence" | "assetState"> & {
+    resolutionConfidence?: ResolvedAsset["resolutionConfidence"]
+    assetState?: ResolvedAsset["assetState"]
+  },
+): ResolvedAsset {
+  const resolutionConfidence =
+    asset.resolutionConfidence ?? (asset.confidence === "low" ? "ambiguous" : asset.confidence)
+  return {
+    ...asset,
+    resolutionConfidence,
+    assetState: asset.assetState ?? null,
+    assetKey: assetKeyOf(asset),
+  }
 }
 
 function formatCap(value: number | null | undefined) {

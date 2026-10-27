@@ -49,11 +49,12 @@ export const PULSE_BOOK: Record<string, PulseAsset> = {
   },
   PDAI: {
     symbol: "PDAI",
-    name: "Good DAI",
-    contract: "0x75c84ca7ec3f14e4f53acabf6edd628cd1b22bc1",
-    pair: "0x25687d10560849173d3bcce0f67ec930517f35d4",
+    name: "DAI",
+    contract: "0x6b175474e89094c44da98b954eedeac495271d0f",
+    pair: "0xfc64556faa683e6087f425819c7ca3c558e13ac1",
     logo: null,
-    reason: "Good DAI on PulseChain, not Ethereum DAI.",
+    reason:
+      "$PDAI is PulseChain DAI at 0x6b175474e89094c44da98b954eedeac495271d0f. GeckoTerminal's symbol is DAI.",
   },
 }
 

@@ -16,6 +16,9 @@ export type FeedDTO = {
   rawText: string
   matchType: string
   confidence: string
+  callKind?: string | null
+  assetState?: string | null
+  resolutionConfidence?: string | null
   priceAt: number | null
   priceNow: number | null
   roi1h: number | null

@@ -1,4 +1,5 @@
 import { average, median } from "../format"
+import { countsTowardScore } from "../detect/kinds"
 import { WEIGHTS, ramp } from "./evaluate"
 
 export type ScoreMode = "first" | "all"
@@ -16,6 +17,9 @@ export type StatMention = {
   pumpDumpFlag: boolean
   pumpDumpScore: number | null
   priceAt: number | null
+  callKind?: string | null
+  resolutionStatus?: string | null
+  priceStatus?: string | null
 }
 
 /** Asset identity for "first call" grouping. Nameless rows stay their own group. */
@@ -102,7 +106,8 @@ export function aggregateInfluencer(
   mentions: StatMention[],
   mode: ScoreMode = "first",
 ): InfluencerAggregate {
-  const scored = mode === "all" ? mentions : firstCalls(mentions)
+  const eligible = mentions.filter((mention) => countsTowardScore(mention))
+  const scored = mode === "all" ? eligible : firstCalls(eligible)
   const horizons = {
     "1h": horizonStats(nums(scored, "1h")),
     "24h": horizonStats(nums(scored, "24h")),
@@ -150,14 +155,14 @@ export function aggregateInfluencer(
     .sort((a, b) => b.roi - a.roi)
 
   const keys = new Map<string, number>()
-  for (const mention of mentions) {
+  for (const mention of eligible) {
     if (!mention.assetKey && !mention.symbol) continue
     const key = assetGroupKey(mention)
     keys.set(key, (keys.get(key) ?? 0) + 1)
   }
 
   return {
-    shillCount: mentions.length,
+    shillCount: eligible.length,
     uniqueTickers: keys.size,
     pricedCount: scored.filter((mention) => mention.priceAt != null).length,
     horizons,

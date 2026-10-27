@@ -9,6 +9,7 @@ import type { FeedDTO } from "@/lib/types"
 import { RelativeTime } from "./animated-number"
 import { useLive } from "./live-provider"
 import { MarkRoi } from "./mark"
+import { MentionTags, mentionMuted } from "./mention-tags"
 import { TokenLogo } from "./token-logo"
 import { VoiceAvatar } from "./voice-avatar"
 
@@ -50,7 +51,7 @@ export function FeedBoard({ initial, live = true }: { initial: FeedDTO[]; live?:
       </div>
       <ul className="flex flex-col gap-3">
         {filtered.map((item) => (
-          <li key={item.id} className="rounded-xl border bg-card/80 p-4">
+          <li key={item.id} className={`rounded-xl border bg-card/80 p-4 ${mentionMuted(item.callKind, item.priceStatus)}`}>
             <div className="flex items-start gap-3">
               <VoiceAvatar src={item.profileImageUrl} username={item.username} />
               <div className="min-w-0 flex-1">
@@ -63,6 +64,12 @@ export function FeedBoard({ initial, live = true }: { initial: FeedDTO[]; live?:
                   {item.influencerDemo ? <Badge variant="outline">Demo</Badge> : <Badge>Live</Badge>}
                   {item.pumpDumpFlag ? <Badge variant="destructive">Dump flag</Badge> : null}
                   {item.confidence === "low" ? <Badge variant="outline">Low confidence</Badge> : null}
+                  <MentionTags
+                    callKind={item.callKind}
+                    priceStatus={item.priceStatus}
+                    assetState={item.assetState}
+                    resolutionConfidence={item.resolutionConfidence}
+                  />
                 </div>
                 <p className="mt-2 line-clamp-3 text-sm leading-6">{item.text}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">

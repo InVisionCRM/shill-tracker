@@ -63,11 +63,12 @@ describe("resolveEvmContract", () => {
     expect(asset.geckoterminalNetwork).toBe("eth")
   })
 
-  it("stores unknown-evm when no pair exists yet", () => {
-    const dead = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  it("marks a contract with no liquidity as dead instead of guessing ethereum", () => {
+    const dead = "0xe72834590d7a339ead78e7fbd1d3c7f76f6eb430"
     const asset = resolveEvmContract(dead, [])
     expect(asset.chain).toBe("unknown-evm")
-    expect(asset.resolutionStatus).toBe("pending")
+    expect(asset.assetState).toBe("dead")
+    expect(asset.resolutionStatus).toBe("resolved")
     expect(asset.contractAddress).toBe(dead)
     expect(asset.pairAddress).toBeNull()
   })

@@ -73,7 +73,32 @@ export type EvaluatedCall = {
   pumpDumpScore: number | null
   pumpDumpFlag: boolean
   pumpDumpReasons: string[]
-  priceStatus: "partial" | "ready" | "unavailable"
+  priceStatus: "partial" | "ready" | "unavailable" | "unverifiable"
+}
+
+/** A dead or rugged asset is -100% from the first real entry. No entry means unverifiable. */
+export function applyAssetState(
+  evaluated: EvaluatedCall,
+  assetState: "dead" | "rugged" | null | undefined,
+): EvaluatedCall {
+  if (assetState !== "dead" && assetState !== "rugged") return evaluated
+  if (evaluated.priceAt == null) {
+    return {
+      ...evaluated,
+      priceNow: null,
+      roiNow: null,
+      pumpDumpScore: null,
+      pumpDumpFlag: false,
+      pumpDumpReasons: [],
+      priceStatus: "unverifiable",
+    }
+  }
+  return {
+    ...evaluated,
+    priceNow: 0,
+    roiNow: -1,
+    priceStatus: evaluated.priceStatus === "unavailable" ? "partial" : evaluated.priceStatus,
+  }
 }
 
 const HOUR = 60 * 60 * 1000

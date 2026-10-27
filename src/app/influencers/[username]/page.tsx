@@ -12,6 +12,8 @@ import { RoiHeatmap, TickerDonut } from "@/components/mix-charts"
 import { TokenLogo } from "@/components/token-logo"
 import { VoiceScores, type CallPeek, type ScorePack } from "@/components/voice-scores"
 import type { StoredBook } from "@/components/portfolio-panel"
+import { MentionTags, mentionMuted } from "@/components/mention-tags"
+import { countsTowardScore } from "@/lib/detect/kinds"
 import { chainLabel, formatCallDate, formatCompact, formatRoi, formatUsd, roiClass } from "@/lib/format"
 import { getInfluencer, toPosition } from "@/lib/queries"
 import type { ScoreSnapshot } from "@/lib/types"
@@ -48,6 +50,7 @@ async function Profile({ params }: { params: Promise<{ username: string }> }) {
   const allPositions = allComplete
     ? mentions
         .filter((mention) => {
+          if (!countsTowardScore(mention)) return false
           if (seen.has(mention.id)) return false
           seen.add(mention.id)
           return true
@@ -217,10 +220,19 @@ async function Profile({ params }: { params: Promise<{ username: string }> }) {
               <PostText text={post.text} />
               <div className="mt-3 flex flex-wrap gap-2">
                 {(byPost.get(post.id) ?? []).map((mention) => (
-                  <Link key={mention.id} href={`/shills/${mention.id}`}>
+                  <Link key={mention.id} href={`/shills/${mention.id}`} className={mentionMuted(mention.callKind, mention.priceStatus)}>
                     <Badge variant={mention.pumpDumpFlag ? "destructive" : "secondary"}>
-                      {mention.symbol ? `$${mention.symbol}` : mention.rawText} {formatRoi(mention.roi7d ?? mention.roi24h ?? mention.roiNow)}
+                      {mention.symbol ? `$${mention.symbol}` : mention.rawText}{" "}
+                      {mention.priceStatus === "unverifiable"
+                        ? "unverifiable"
+                        : formatRoi(mention.roi7d ?? mention.roi24h ?? mention.roiNow)}
                     </Badge>
+                    <MentionTags
+                      callKind={mention.callKind}
+                      priceStatus={mention.priceStatus}
+                      assetState={mention.assetState}
+                      resolutionConfidence={mention.resolutionConfidence}
+                    />
                   </Link>
                 ))}
                 {(byPost.get(post.id) ?? []).length === 0 ? (

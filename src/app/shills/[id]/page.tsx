@@ -11,6 +11,7 @@ import { MarkPrice, MarkRoi } from "@/components/mark"
 import { VoiceAvatar } from "@/components/voice-avatar"
 import { OutcomeFlare } from "@/components/outcome-flare"
 import { TokenLogo } from "@/components/token-logo"
+import { MentionTags, mentionMuted } from "@/components/mention-tags"
 import { chainLabel, formatRoi, formatUsd, roiClass, shortAddress } from "@/lib/format"
 import { getMention } from "@/lib/queries"
 
@@ -38,7 +39,7 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
   ] as const
 
   return (
-    <div className="relative flex flex-col gap-6">
+    <div className={`relative flex flex-col gap-6 ${mentionMuted(mention.callKind, mention.priceStatus)}`}>
       <OutcomeFlare roi={mention.roi7d ?? mention.roiNow} />
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-3">
@@ -63,7 +64,15 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
         <div className="flex flex-wrap gap-2">
           {voice.isDemo ? <Badge variant="outline">Demo</Badge> : <Badge>Live</Badge>}
           <Badge variant="outline">{mention.confidence} confidence</Badge>
-          <Badge variant="secondary">{mention.priceSource ?? mention.priceStatus}</Badge>
+          <Badge variant="secondary">
+            {mention.priceStatus === "unverifiable" ? "Unverifiable" : (mention.priceSource ?? mention.priceStatus)}
+          </Badge>
+          <MentionTags
+            callKind={mention.callKind}
+            priceStatus={mention.priceStatus}
+            assetState={mention.assetState}
+            resolutionConfidence={mention.resolutionConfidence}
+          />
           {mention.pumpDumpFlag ? <Badge variant="destructive" className="dump-glow">Pump-then-dump</Badge> : null}
         </div>
       </header>

@@ -199,7 +199,6 @@ export const CASHTAG_DENY = new Set([
   "WWW",
   "COM",
   "ORG",
-  "NET",
   "NFT",
   "ATH",
   "ATL",
@@ -230,6 +229,7 @@ export const CHAIN_TO_GECKOTERMINAL: Record<string, string> = {
   cronos: "cro",
   gnosis: "gnosis",
   pulsechain: "pulsechain",
+  robinhood: "robinhood",
   ton: "ton",
   sui: "sui-network",
 }

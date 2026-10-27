@@ -7,9 +7,10 @@ import { priceFromCache } from "./backlog"
 import { callRankWindow } from "../scoring/call-rank"
 import { getPricingProgress } from "../queries"
 import { assetKeyOf } from "../format"
-import { WEIGHTS, evaluateCall } from "../scoring/evaluate"
+import { lookupOverride } from "../detect/overrides"
+import { WEIGHTS, applyAssetState, evaluateCall } from "../scoring/evaluate"
 import { recomputeInfluencers } from "../stats"
-import { fetchHistory, fetchBinanceTickers, fetchCoingeckoSimple, fetchDexTokenPrices } from "./history"
+import { fetchHistory, fetchBinanceTickers, fetchCoingeckoSimple, fetchDexTokenPrices, isUnverifiable } from "./history"
 import { resolveContract, resolveSymbol } from "./resolve"
 
 const HOUR = 60 * 60 * 1000
@@ -40,11 +41,13 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
             with ranked as (
               select id, ${callRankWindow} as call_rank
               from mentions
+              where call_kind = 'call'
             )
             select m.id
             from mentions m
             join ranked r on r.id = m.id
             where m.pinned = false
+              and m.call_kind = 'call'
               and m.resolution_status = 'pending'
             order by r.call_rank asc, m.price_attempts asc, m.created_at asc
             limit ${resolveLimit}
@@ -67,11 +70,34 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
 
     for (const mention of pending) {
       try {
-        const resolved = mention.contractAddress
-          ? await resolveContract(mention.contractAddress, mention.chain)
-          : mention.symbol
-            ? await resolveSymbol(mention.symbol)
-            : null
+        const curated = lookupOverride({
+          symbol: mention.symbol,
+          postedAt: mention.createdAt,
+          chainHint: mention.chain,
+        })
+        const resolved = curated
+          ? {
+              symbol: curated.symbol,
+              assetName: curated.assetName,
+              assetKey: assetKeyOf(curated),
+              coingeckoId: curated.coingeckoId,
+              binanceSymbol: null,
+              chain: curated.chain,
+              contractAddress: curated.contractAddress,
+              pairAddress: curated.pairAddress,
+              dexscreenerUrl: curated.dexscreenerUrl,
+              geckoterminalNetwork: curated.geckoterminalNetwork,
+              confidence: curated.confidence,
+              confidenceReason: curated.confidenceReason,
+              resolutionConfidence: curated.resolutionConfidence,
+              resolutionStatus: "resolved" as const,
+              assetState: null,
+            }
+          : mention.contractAddress
+            ? await resolveContract(mention.contractAddress, mention.chain)
+            : mention.symbol
+              ? await resolveSymbol(mention.symbol, mention.chain)
+              : null
         if (!resolved) continue
         const known = resolved.symbol ? canonicalBySymbol(resolved.symbol) : null
         await db
@@ -89,8 +115,15 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
             geckoterminalNetwork: resolved.geckoterminalNetwork,
             confidence: resolved.confidence,
             confidenceReason: resolved.confidenceReason,
+            resolutionConfidence: resolved.resolutionConfidence,
             resolutionStatus: resolved.resolutionStatus,
-            priceStatus: resolved.resolutionStatus === "unresolved" ? "unavailable" : mention.priceStatus,
+            assetState: resolved.assetState,
+            priceStatus:
+              resolved.assetState === "dead" && !resolved.pairAddress
+                ? "unverifiable"
+                : resolved.resolutionStatus === "unresolved"
+                  ? "unavailable"
+                  : mention.priceStatus,
             priceAttempts:
               resolved.chain === "unknown-evm" && resolved.resolutionStatus === "pending"
                 ? mention.priceAttempts + 1
@@ -128,6 +161,7 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
             sql`${mentions.pairAddress} is not null`,
           ),
           or(
+            eq(mentions.callKind, "call"),
             inArray(mentions.priceStatus, ["pending", "partial"]),
             and(isNull(mentions.price1h), lt(mentions.createdAt, new Date(Date.now() - HOUR))),
             and(isNull(mentions.price24h), lt(mentions.createdAt, new Date(Date.now() - DAY))),
@@ -153,13 +187,20 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
             coingeckoId: mention.coingeckoId,
             chain: mention.chain,
             pairAddress: mention.pairAddress,
+            contractAddress: mention.contractAddress,
             geckoterminalNetwork: mention.geckoterminalNetwork,
           },
           from,
           to,
+          postedAt,
         )
         if (candles.length < 2) throw new Error(`only ${candles.length} candles from ${source}`)
-        const evaluated = evaluateCall({ postedAt, now, candles })
+        const evaluated = applyAssetState(
+          evaluateCall({ postedAt, now, candles }),
+          mention.assetState === "dead" || mention.assetState === "rugged" ? mention.assetState : null,
+        )
+        const assetState =
+          mention.assetState === "dead" && evaluated.priceAt != null ? "rugged" : mention.assetState
         await db
           .update(mentions)
           .set({
@@ -189,6 +230,7 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
             pumpDumpFlag: evaluated.pumpDumpFlag,
             pumpDumpReasons: evaluated.pumpDumpReasons,
             series: candles,
+            assetState,
             priceStatus: evaluated.priceStatus,
             priceError: null,
             pricedAt: new Date(),
@@ -200,12 +242,13 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
       } catch (error) {
         detail.failed = Number(detail.failed) + 1
         const attempts = mention.priceAttempts + 1
+        const unverifiable = isUnverifiable(error)
         await db
           .update(mentions)
           .set({
             priceError: error instanceof Error ? error.message : String(error),
             priceAttempts: attempts,
-            priceStatus: attempts >= 5 ? "unavailable" : mention.priceStatus,
+            priceStatus: unverifiable ? "unverifiable" : attempts >= 5 ? "unavailable" : mention.priceStatus,
             pricedAt: new Date(),
             updatedAt: new Date(),
           })
@@ -309,6 +352,7 @@ async function applyPulseBias() {
   const ids = biased.map((row) => row.id)
   let count = 0
   for (const asset of Object.values(PULSE_BOOK)) {
+    if (asset.symbol === "HEX") continue
     const updated = await db
       .update(mentions)
       .set({

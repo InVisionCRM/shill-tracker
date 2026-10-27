@@ -1,5 +1,7 @@
 import { and, eq } from "drizzle-orm"
+import { classifyPostMaybeLlm } from "./detect/context"
 import { collapseMatches, extractMatches, identifyFast } from "./detect/extract"
+import { linkNearbyPosts, linkSamePost } from "./detect/link"
 import { VOICE_PRESETS } from "./detect/pulse"
 import { getDb } from "./db"
 import { influencers, mentions, posts } from "./db/schema"
@@ -186,6 +188,25 @@ export async function ingestPosts(input: IngestPayload, options?: { deferPricing
   let postsUnchanged = 0
   const mentionIds: string[] = []
   let latest = influencer.latestPostId
+  const aliases = { ...(preset?.aliases ?? {}), ...(influencer.aliases ?? {}) }
+  const drafts = []
+  for (const post of input.posts) {
+    const kind = await classifyPostMaybeLlm(post.text)
+    const matches = collapseMatches(
+      linkSamePost(extractMatches(post.text, aliases)).map((match) => ({
+        ...identifyFast(match, {
+          chainBias: influencer.chainBias,
+          text: post.text,
+          postedAt: post.createdAt,
+        }),
+        callKind: kind.kind,
+        callReason: kind.reason,
+      })),
+    )
+    drafts.push({ id: post.id, createdAt: post.createdAt.getTime(), matches })
+  }
+  linkNearbyPosts(drafts)
+  const preparedPosts = new Map(drafts.map((draft) => [draft.id, draft.matches]))
 
   for (const post of input.posts) {
     latest = laterSnowflake(latest, post.id)
@@ -238,12 +259,7 @@ export async function ingestPosts(input: IngestPayload, options?: { deferPricing
       await db.delete(mentions).where(eq(mentions.postId, post.id))
     }
 
-    const aliases = { ...(preset?.aliases ?? {}), ...(influencer.aliases ?? {}) }
-    const identified = collapseMatches(
-      extractMatches(post.text, aliases).map((match) =>
-        identifyFast(match, { chainBias: influencer.chainBias }),
-      ),
-    )
+    const identified = preparedPosts.get(post.id) ?? []
     for (const match of identified) {
       const inserted = await db
         .insert(mentions)
@@ -266,9 +282,11 @@ export async function ingestPosts(input: IngestPayload, options?: { deferPricing
             match.chain ??
             (match.matchType === "solana" ? "solana" : match.matchType === "evm" ? "unknown-evm" : null),
           confidence: match.confidence,
-          confidenceReason: match.confidenceReason,
+          confidenceReason: match.callReason ? `${match.confidenceReason} ${match.callReason}` : match.confidenceReason,
+          resolutionConfidence: match.resolutionConfidence ?? (match.confidence === "low" ? "ambiguous" : match.confidence),
           resolutionStatus: match.resolutionStatus,
-          priceStatus: "pending",
+          callKind: match.callKind ?? "call",
+          priceStatus: match.callKind && match.callKind !== "call" ? "excluded" : "pending",
           isDemo: false,
           pinned: false,
           createdAt: post.createdAt,

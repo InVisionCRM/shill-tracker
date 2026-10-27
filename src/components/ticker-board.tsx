@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ScopeToggle } from "@/components/scope-toggle"
 import { MarkRoi } from "@/components/mark"
 import { RelativeTime } from "@/components/animated-number"
+import { MentionTags, mentionMuted } from "@/components/mention-tags"
 import { formatCallDate, formatRoi, formatUsd, roiClass } from "@/lib/format"
 
 type FirstRow = {
@@ -23,6 +24,10 @@ type FirstRow = {
   priceSource: string | null
   pumpDumpFlag: boolean
   confidence: string
+  callKind?: string | null
+  priceStatus?: string | null
+  assetState?: string | null
+  resolutionConfidence?: string | null
   symbol: string | null
   mentionCount: number
 }
@@ -91,7 +96,7 @@ export function TickerBoard({
             <Link
               key={row.id}
               href={`/shills/${row.id}`}
-              className="flex flex-col gap-2 rounded-lg border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+              className={`flex flex-col gap-2 rounded-lg border px-3 py-3 sm:flex-row sm:items-center sm:justify-between ${mentionMuted(row.callKind, row.priceStatus)}`}
             >
               <span className="min-w-0">
                 <span className="block font-medium">{row.name}</span>
@@ -115,7 +120,15 @@ export function TickerBoard({
               <span className="flex flex-wrap items-center gap-2 text-sm">
                 {row.pumpDumpFlag ? <Badge variant="destructive">Dump</Badge> : null}
                 {row.confidence === "low" ? <Badge variant="outline">Low confidence</Badge> : null}
-                <span className={roiClass(row.roi7d)}>7d {formatRoi(row.roi7d)}</span>
+                <MentionTags
+                  callKind={row.callKind}
+                  priceStatus={row.priceStatus}
+                  assetState={row.assetState}
+                  resolutionConfidence={row.resolutionConfidence}
+                />
+                <span className={roiClass(row.roi7d)}>
+                  7d {row.priceStatus === "unverifiable" ? "unverifiable" : formatRoi(row.roi7d)}
+                </span>
                 <MarkRoi
                   assetKey={row.assetKey}
                   priceAt={row.priceAt}

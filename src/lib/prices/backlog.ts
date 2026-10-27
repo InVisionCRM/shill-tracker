@@ -1,10 +1,10 @@
-import { eq, sql } from "drizzle-orm"
+import { eq, inArray, sql } from "drizzle-orm"
 import { getDb } from "../db"
 import { candleDays, mentions } from "../db/schema"
 import { callRankWindow } from "../scoring/call-rank"
-import { downsample, evaluateCall } from "../scoring/evaluate"
+import { applyAssetState, downsample, evaluateCall } from "../scoring/evaluate"
 import { cachedDays, dayStart, firstGap, loadCandles, storeDays, windowDays } from "./candles"
-import { fetchHistory } from "./history"
+import { fetchHistory, isUnverifiable } from "./history"
 
 const DAY = 24 * 60 * 60 * 1000
 const HOUR = 60 * 60 * 1000
@@ -18,6 +18,8 @@ type Row = {
   coingeckoId: string | null
   chain: string | null
   pairAddress: string | null
+  contractAddress: string | null
+  assetState: string | null
   geckoterminalNetwork: string | null
   priceAttempts: number
   priceStatus: string
@@ -39,6 +41,7 @@ export async function priceFromCache(options: {
     with ranked as (
       select id, ${callRankWindow} as call_rank
       from mentions
+      where call_kind = 'call'
     )
     select
       m.id,
@@ -49,6 +52,8 @@ export async function priceFromCache(options: {
       m.coingecko_id,
       m.chain,
       m.pair_address,
+      m.contract_address,
+      m.asset_state,
       m.geckoterminal_network,
       m.price_attempts,
       m.price_status,
@@ -56,7 +61,10 @@ export async function priceFromCache(options: {
     from mentions m
     join ranked r on r.id = m.id
     where m.pinned = false
+      and m.call_kind = 'call'
       and m.asset_key is not null
+      and m.price_status is distinct from 'unverifiable'
+      and m.price_status is distinct from 'excluded'
       and (
         m.resolution_status = 'resolved'
         or m.coingecko_id is not null
@@ -100,6 +108,8 @@ export async function priceFromCache(options: {
     price_attempts: number
     price_status: string
     call_rank: number | string
+    contract_address: string | null
+    asset_state: string | null
   }>(selected).map((row) => ({
     id: row.id,
     influencerId: row.influencer_id,
@@ -109,6 +119,8 @@ export async function priceFromCache(options: {
     coingeckoId: row.coingecko_id,
     chain: row.chain,
     pairAddress: row.pair_address,
+    contractAddress: row.contract_address,
+    assetState: row.asset_state,
     geckoterminalNetwork: row.geckoterminal_network,
     priceAttempts: Number(row.price_attempts),
     priceStatus: row.price_status,
@@ -155,18 +167,31 @@ export async function priceFromCache(options: {
           coingeckoId: sample.coingeckoId,
           chain: sample.chain,
           pairAddress: sample.pairAddress,
+          contractAddress: sample.contractAddress,
           geckoterminalNetwork: sample.geckoterminalNetwork,
         },
         from,
         to,
+        sample.createdAt.getTime(),
       )
       await storeDays(assetKey, gap, candles, source)
       for (const day of gap) have.add(day)
       sourceByAsset.set(assetKey, source)
       fetches += 1
-    } catch {
+    } catch (error) {
       fetches += 1
       failed += 1
+      if (isUnverifiable(error)) {
+        await db
+          .update(mentions)
+          .set({
+            priceStatus: "unverifiable",
+            priceError: error instanceof Error ? error.message : String(error),
+            pricedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(inArray(mentions.id, group.map((row) => row.id)))
+      }
     }
   }
 
@@ -202,7 +227,10 @@ export async function priceFromCache(options: {
       const slice = candles.filter((candle) => candle.t >= from && candle.t <= to)
       try {
         if (slice.length < 2) throw new Error(`cached window has ${slice.length} candles`)
-        const evaluated = evaluateCall({ postedAt, now, candles: slice })
+        const evaluated = applyAssetState(
+          evaluateCall({ postedAt, now, candles: slice }),
+          row.assetState === "dead" || row.assetState === "rugged" ? row.assetState : null,
+        )
         await db
           .update(mentions)
           .set({
@@ -232,6 +260,7 @@ export async function priceFromCache(options: {
             pumpDumpFlag: evaluated.pumpDumpFlag,
             pumpDumpReasons: evaluated.pumpDumpReasons,
             series: downsample(slice, 220),
+            assetState: row.assetState === "dead" && evaluated.priceAt != null ? "rugged" : row.assetState,
             priceStatus: evaluated.priceStatus,
             priceError: null,
             pricedAt: new Date(),

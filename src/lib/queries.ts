@@ -42,6 +42,7 @@ async function mentionProgress(): Promise<PricingProgress & { firstFlagged: numb
         roi_7d,
         ${callRankWindow} as call_rank
       from mentions
+      where call_kind = 'call'
     )
     select
       count(*)::int as all_total,
@@ -195,7 +196,7 @@ export async function getInfluencer(username: string) {
     with ranked as (
       select created_at, roi_7d, ${callRankWindow} as call_rank
       from mentions
-      where influencer_id = ${influencer.id}
+      where influencer_id = ${influencer.id} and call_kind = 'call'
     )
     select to_char(date_trunc('week', created_at), 'YYYY-MM-DD') as week, avg(roi_7d)::float8 as roi
     from ranked
@@ -216,6 +217,9 @@ export async function getInfluencer(username: string) {
         pump_dump_flag, pinned, price_source, price_now
       from mentions
       where influencer_id = ${influencer.id}
+        and call_kind = 'call'
+        and resolution_status <> 'unresolved'
+        and price_status is distinct from 'unverifiable'
       order by ${assetPartition}, created_at asc, id asc
     ) firsts
     order by created_at desc
@@ -383,7 +387,7 @@ export async function getTicker(symbol: string) {
   const [count] = await db
     .select({
       n: sql<number>`count(*)::int`,
-      avg: sql<number | null>`avg(${mentions.roi7d})::float8`,
+      avg: sql<number | null>`avg(${mentions.roi7d}) filter (where ${mentions.callKind} = 'call' and ${mentions.priceStatus} is distinct from 'unverifiable')::float8`,
     })
     .from(mentions)
     .where(match)
@@ -402,6 +406,10 @@ export async function getTicker(symbol: string) {
       m.price_now,
       m.pump_dump_flag,
       m.confidence,
+      m.call_kind,
+      m.price_status,
+      m.asset_state,
+      m.resolution_confidence,
       m.pinned,
       m.price_source,
       i.username,
@@ -411,9 +419,14 @@ export async function getTicker(symbol: string) {
       select distinct on (influencer_id)
         id
       from mentions
-      where upper(symbol) = upper(${normalized})
-        or contract_address = ${normalized}
-        or coingecko_id = ${normalized.toLowerCase()}
+      where call_kind = 'call'
+        and resolution_status <> 'unresolved'
+        and price_status is distinct from 'unverifiable'
+        and (
+          upper(symbol) = upper(${normalized})
+          or contract_address = ${normalized}
+          or coingecko_id = ${normalized.toLowerCase()}
+        )
       order by influencer_id, created_at asc, id asc
     ) firsts
     join mentions m on m.id = firsts.id
@@ -442,6 +455,10 @@ export async function getTicker(symbol: string) {
     price_now: number | null
     pump_dump_flag: boolean
     confidence: string
+    call_kind: string | null
+    price_status: string | null
+    asset_state: string | null
+    resolution_confidence: string | null
     pinned: boolean
     price_source: string | null
     username: string
@@ -461,6 +478,10 @@ export async function getTicker(symbol: string) {
     priceNow: num(row.price_now),
     pumpDumpFlag: row.pump_dump_flag,
     confidence: row.confidence,
+    callKind: row.call_kind,
+    priceStatus: row.price_status,
+    assetState: row.asset_state,
+    resolutionConfidence: row.resolution_confidence,
     pinned: row.pinned,
     priceSource: row.price_source,
     username: row.username,
@@ -490,6 +511,9 @@ export async function getFeed(limit = 40) {
       rawText: mentions.rawText,
       matchType: mentions.matchType,
       confidence: mentions.confidence,
+      callKind: mentions.callKind,
+      assetState: mentions.assetState,
+      resolutionConfidence: mentions.resolutionConfidence,
       priceAt: mentions.priceAt,
       priceNow: mentions.priceNow,
       roi1h: mentions.roi1h,
@@ -587,7 +611,7 @@ export async function getSparklines() {
         select influencer_id, roi_7d, created_at,
           ${callRankWindow} as call_rank
         from mentions
-        where roi_7d is not null
+        where roi_7d is not null and call_kind = 'call' and price_status is distinct from 'unverifiable'
       ) firsts
       where call_rank = 1
     ) ranked

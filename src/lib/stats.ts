@@ -39,6 +39,9 @@ export async function recomputeInfluencers(influencerIds?: string[]) {
       pumpDumpFlag: row.pumpDumpFlag,
       pumpDumpScore: row.pumpDumpScore,
       priceAt: row.priceAt,
+      callKind: row.callKind,
+      resolutionStatus: row.resolutionStatus,
+      priceStatus: row.priceStatus,
     })
     mentionsBy.set(row.influencerId, list)
   }

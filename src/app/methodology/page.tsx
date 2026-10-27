@@ -34,11 +34,14 @@ export default function MethodologyPage() {
           Canonical large caps resolve immediately to a CoinGecko id and, where one exists, a Binance USDT pair.
           Everything else waits for CoinGecko search plus market cap, then DexScreener liquidity. The biggest market
           cap wins. Confidence is high when the leader is at least 5× the runner-up and above $5M, medium when the
-          lead is at least 2× and above $1M, and low when the field is crowded. An 0x contract is not assumed to
-          be Ethereum. Pair lookup checks PulseChain first, then Ethereum, Base, BSC, and other EVM chains, on
-          DexScreener and then GeckoTerminal. A PulseChain pool wins when it has real liquidity; a dust pool does
-          not hide a deeper market on Ethereum, Base, or BSC. Until a pair exists the chain is stored as unknown-evm
-          and can be resolved on a later pass. A thin book stays low confidence and is badged in the UI. A PulseChain-focused
+          lead is at least 2× and above $1M, and low when the field is crowded.           An 0x contract is not assumed to be Ethereum. A `chain:0x` prefix, a hashtag, “on base”, or an explorer
+          link is a chain hint and beats the default. Otherwise pair lookup checks PulseChain first, then Ethereum,
+          Base, BSC, and other EVM chains. A dust PulseChain pool does not hide a deeper market. $PDAI, PulseChain
+          $BEAR, and HEX follow a curated map: HEX before 13 May 2023 is Ethereum, and later HEX is PulseChain unless
+          the post says eHEX or ETH. Low-confidence picks are marked ambiguous. A contract with no liquidity is dead.
+          If it had a verifiable entry, the mark is −100%. If it never had one, the price is unverifiable and is left
+          out of ROI. Only posts classified as calls are scored. Recaps, commentary, warnings, and jokes stay in the
+          feed and are greyed out. A thin book stays low confidence and is badged in the UI. A PulseChain-focused
           voice resolves HEX, PLS, PLSX, INC, and PDAI to PulseChain pools instead of the same symbol on another
           chain. HEX on every other voice is the Ethereum listing. The chain is shown next to the ticker.
         </p>

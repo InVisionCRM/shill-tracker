@@ -1,7 +1,10 @@
 import { CASHTAG_DENY, NAME_TO_SYMBOL, canonicalBySymbol } from "./assets"
+import { chainFromPrefix, contextFromText, isPersonDescriptor, nameIsTickerContext, HASHTAG_DENY } from "./context"
+import type { CallKind } from "./kinds"
+import { lookupOverride } from "./overrides"
 import { dexUrl, pulseAsset } from "./pulse"
 
-export type MatchType = "cashtag" | "name" | "evm" | "solana"
+export type MatchType = "cashtag" | "hashtag" | "name" | "evm" | "solana"
 
 export type RawMatch = {
   matchType: MatchType
@@ -9,9 +12,12 @@ export type RawMatch = {
   symbol: string | null
   contractAddress: string | null
   matchKey: string
+  chain?: string | null
 }
 
 const CASHTAG = /\$([A-Za-z][A-Za-z0-9]{1,14})\b/g
+const HASHTAG = /#([A-Za-z][A-Za-z0-9]{1,20})\b/g
+const PREFIXED = /\b([A-Za-z][A-Za-z0-9]{1,20}):(0x[a-fA-F0-9]{40})\b/g
 const EVM = /\b0x[a-fA-F0-9]{40}\b/g
 const SOLANA = /(?<![1-9A-HJ-NP-Za-km-z])[1-9A-HJ-NP-Za-km-z]{32,44}(?![1-9A-HJ-NP-Za-km-z])/g
 
@@ -49,6 +55,8 @@ export function extractMatches(text: string, extraNames?: Record<string, string>
   for (const hit of text.matchAll(CASHTAG)) {
     const symbol = hit[1].toUpperCase()
     if (CASHTAG_DENY.has(symbol)) continue
+    const index = hit.index ?? 0
+    if (isPersonDescriptor(text, index, hit[0])) continue
     push({
       matchType: "cashtag",
       rawText: hit[0],
@@ -58,9 +66,25 @@ export function extractMatches(text: string, extraNames?: Record<string, string>
     })
   }
 
+  for (const hit of text.matchAll(HASHTAG)) {
+    const symbol = hit[1].toUpperCase()
+    if (HASHTAG_DENY.has(symbol) || CASHTAG_DENY.has(symbol)) continue
+    if (symbol.length < 3) continue
+    push({
+      matchType: "hashtag",
+      rawText: hit[0],
+      symbol,
+      contractAddress: null,
+      matchKey: `hashtag:${symbol}`,
+    })
+  }
+
   for (const hit of text.matchAll(NAME_PATTERN)) {
     const symbol = NAME_TO_SYMBOL[hit[0].toLowerCase()]
     if (!symbol) continue
+    const index = hit.index ?? 0
+    if (!nameIsTickerContext(text, index, hit[0])) continue
+    if (isPersonDescriptor(text, index, hit[0])) continue
     push({
       matchType: "name",
       rawText: hit[0],
@@ -82,6 +106,9 @@ export function extractMatches(text: string, extraNames?: Record<string, string>
     for (const hit of text.matchAll(aliasPattern)) {
       const symbol = extraNames[hit[0].toLowerCase()]?.toUpperCase()
       if (!symbol) continue
+      const index = hit.index ?? 0
+      if (!nameIsTickerContext(text, index, hit[0])) continue
+      if (isPersonDescriptor(text, index, hit[0])) continue
       push({
         matchType: "name",
         rawText: hit[0],
@@ -93,10 +120,26 @@ export function extractMatches(text: string, extraNames?: Record<string, string>
   }
 
   const evmSpans: { start: number; end: number }[] = []
+  for (const hit of text.matchAll(PREFIXED)) {
+    const address = hit[2].toLowerCase()
+    const start = hit.index ?? 0
+    evmSpans.push({ start, end: start + hit[0].length })
+    push({
+      matchType: "evm",
+      rawText: hit[0],
+      symbol: null,
+      contractAddress: address,
+      chain: chainFromPrefix(hit[1]),
+      matchKey: `evm:${address}`,
+    })
+  }
+
   for (const hit of text.matchAll(EVM)) {
     const address = hit[0].toLowerCase()
     const start = hit.index ?? 0
-    evmSpans.push({ start, end: start + hit[0].length })
+    const end = start + hit[0].length
+    if (evmSpans.some((span) => start < span.end && end > span.start)) continue
+    evmSpans.push({ start, end })
     push({
       matchType: "evm",
       rawText: hit[0],
@@ -136,17 +179,52 @@ export type IdentifiedMatch = RawMatch & {
   geckoterminalNetwork?: string | null
   confidence: "high" | "medium" | "low"
   confidenceReason: string
+  resolutionConfidence?: "high" | "medium" | "low" | "ambiguous"
   resolutionStatus: "pending" | "resolved"
+  callKind?: CallKind
+  callReason?: string
 }
 
 export function identifyFast(
   match: RawMatch,
-  options?: { chainBias?: string | null } | number,
+  options?: { chainBias?: string | null; text?: string | null; postedAt?: number | Date | null; chainHint?: string | null } | number,
 ): IdentifiedMatch {
   const chainBias = typeof options === "number" ? null : options?.chainBias
+  const text = typeof options === "number" ? "" : (options?.text ?? "")
+  const postedAt = typeof options === "number" ? null : options?.postedAt
+  const hinted = typeof options === "number" ? null : options?.chainHint
+  const context = contextFromText(text)
+  const chainHint = match.chain ?? hinted ?? context.chainHint
+
+  const override = lookupOverride({
+    symbol: match.symbol,
+    text,
+    postedAt,
+    chainHint,
+    chainBias,
+  })
+  if (override) {
+    return {
+      ...match,
+      symbol: override.symbol,
+      assetName: override.assetName,
+      coingeckoId: override.coingeckoId,
+      binanceSymbol: null,
+      chain: override.chain,
+      contractAddress: override.contractAddress,
+      pairAddress: override.pairAddress,
+      geckoterminalNetwork: override.geckoterminalNetwork,
+      dexscreenerUrl: override.dexscreenerUrl,
+      confidence: override.confidence,
+      resolutionConfidence: override.resolutionConfidence,
+      confidenceReason: override.confidenceReason,
+      resolutionStatus: "resolved",
+    }
+  }
+
   if (chainBias === "pulsechain" && match.symbol) {
     const pulse = pulseAsset(match.symbol)
-    if (pulse) {
+    if (pulse && pulse.symbol !== "HEX" && pulse.symbol !== "PDAI") {
       return {
         ...match,
         symbol: pulse.symbol,
@@ -187,8 +265,12 @@ export function identifyFast(
       assetName: null,
       coingeckoId: null,
       binanceSymbol: null,
+      chain: match.chain ?? chainHint,
       confidence: "low",
-      confidenceReason: `$${match.symbol} is not on the canonical map. Waiting on CoinGecko market cap or DexScreener liquidity to pick an asset.`,
+      confidenceReason:
+        match.matchType === "hashtag"
+          ? `#${match.symbol} is a candidate ticker. It counts only if it resolves to a known or listed asset.`
+          : `$${match.symbol} is not on the canonical map. Waiting on CoinGecko market cap or DexScreener liquidity to pick an asset.`,
       resolutionStatus: "pending",
     }
   }
@@ -199,11 +281,14 @@ export function identifyFast(
     coingeckoId: null,
     binanceSymbol: null,
     confidence: "low",
-    confidenceReason:
-      match.matchType === "solana"
+    confidenceReason: match.chain
+      ? `Contract is prefixed ${match.chain}. The chain is stored and the pair lookup stays on that chain.`
+      : match.matchType === "solana"
         ? "Solana mint detected. Waiting on DexScreener for the most liquid pair."
         : "EVM contract detected. Chain stays unknown-evm until a pair lookup checks PulseChain, then Ethereum, Base, and BSC.",
-    chain: match.matchType === "solana" ? "solana" : "unknown-evm",
+    chain:
+      match.chain ??
+      (match.matchType === "solana" ? "solana" : match.matchType === "evm" ? (chainHint ?? "unknown-evm") : chainHint),
     resolutionStatus: "pending",
   }
 }
@@ -212,6 +297,7 @@ const SPECIFICITY: Record<MatchType, number> = {
   evm: 3,
   solana: 3,
   cashtag: 2,
+  hashtag: 2,
   name: 1,
 }
 
