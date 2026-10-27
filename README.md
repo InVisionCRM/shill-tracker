@@ -242,4 +242,6 @@ The in-app method page (`/methodology`) is the formula, and it renders the same 
 
 ## Deploy
 
-Deploy the Next.js app on Vercel with the env vars above. Set `DATABASE_URL` to the Neon **pooled** URL and `DATABASE_URL_UNPOOLED` to the direct URL. The `vercel-build` script migrates with the unpooled URL (or `DATABASE_URL` if that is all you have) and then runs `next build`. It never seeds. Leave `SEED_DEMO` unset in production. Cron in `vercel.json` is daily; call `/api/cron/prices` yourself with `CRON_SECRET` to work through a large backlog.
+Deploy the Next.js app on Vercel with the env vars above. Set `DATABASE_URL` to the Neon **pooled** URL and `DATABASE_URL_UNPOOLED` to the direct URL. The `vercel-build` script migrates with the unpooled URL (or `DATABASE_URL` if that is all you have) and then runs `next build`. It never seeds. Leave `SEED_DEMO` unset in production. The app prices from public Binance, CoinGecko, DexScreener, GeckoTerminal, and PulseChain RPC endpoints. `COINGECKO_API_KEY` is optional. Cron in `vercel.json` is daily.
+
+`.github/workflows/cron.yml` calls the same routes from GitHub Actions: prices at 06:00 UTC and scores at 06:30 UTC. Repository secrets `APP_URL` (deployment origin, no path) and `CRON_SECRET` (the same value as the app) are only for that workflow. The app itself does not read `APP_URL`.
