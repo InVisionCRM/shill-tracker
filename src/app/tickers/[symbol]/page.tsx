@@ -10,7 +10,9 @@ import { getTicker } from "@/lib/queries"
 
 export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params
-  return { title: `$${decodeURIComponent(symbol)}` }
+  const ticker = decodeURIComponent(symbol).toUpperCase().slice(0, 32)
+  const description = `Every tracked call on $${ticker}: who shilled it, the price at each post, and how it moved after 1h, 24h, 7d and 30d.`
+  return { title: `$${ticker}`, description, openGraph: { title: `$${ticker} on Shill Tracker`, description } }
 }
 
 export default function TickerPage({ params }: { params: Promise<{ symbol: string }> }) {

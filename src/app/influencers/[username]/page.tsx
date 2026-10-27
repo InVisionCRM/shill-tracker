@@ -23,7 +23,9 @@ import type { ScoreSnapshot } from "@/lib/types"
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params
-  return { title: `@${username}` }
+  const handle = username.replace(/^@/, "")
+  const description = `Every call @${handle} has made on X: the price at the post, then 1h, 24h, 7d and 30d later, with win rate, dump risk and a $100-per-call book.`
+  return { title: `@${handle}`, description, openGraph: { title: `@${handle} on Shill Tracker`, description } }
 }
 
 export default async function InfluencerPage({ params }: { params: Promise<{ username: string }> }) {

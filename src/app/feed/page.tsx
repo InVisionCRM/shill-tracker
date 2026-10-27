@@ -4,7 +4,10 @@ import { FeedBoard } from "@/components/feed-board"
 import { getFeed } from "@/lib/queries"
 import { toFeed } from "@/lib/serialize"
 
-export const metadata = { title: "Feed" }
+export const metadata = {
+  title: "Feed",
+  description: "The latest shills from tracked X accounts with the price at the post and how the token moved since.",
+}
 
 export default function FeedPage() {
   return (

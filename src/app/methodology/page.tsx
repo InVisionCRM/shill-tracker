@@ -1,6 +1,9 @@
 import { WEIGHTS } from "@/lib/scoring/evaluate"
 
-export const metadata = { title: "Method" }
+export const metadata = {
+  title: "Method",
+  description: "How Shill Tracker prices calls: real candles or on-chain reserves only, labeled when the nearest price is a daily close, never estimated.",
+}
 
 export default function MethodologyPage() {
   return (

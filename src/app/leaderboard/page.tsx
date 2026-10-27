@@ -4,7 +4,10 @@ import { Leaderboard } from "@/components/leaderboard"
 import { getLeaderboard, getSparklines } from "@/lib/queries"
 import { toLeader } from "@/lib/serialize"
 
-export const metadata = { title: "Leaderboard" }
+export const metadata = {
+  title: "Leaderboard",
+  description: "X accounts ranked by how their crypto calls actually performed at 24h, 7d and 30d.",
+}
 
 export default function LeaderboardPage() {
   return (

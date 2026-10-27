@@ -16,7 +16,7 @@ import { chainLabel, formatRoi, formatUsd, roiClass, shortAddress } from "@/lib/
 import { logosForAddresses, logosForSymbols } from "@/lib/pulsechain/lookup"
 import { getMention } from "@/lib/queries"
 
-export const metadata = { title: "Call" }
+export const metadata = { title: "Call", description: "One call: the post, the price when it was made, and what the token did next." }
 
 export default function ShillPage({ params }: { params: Promise<{ id: string }> }) {
   return (

@@ -20,7 +20,10 @@ const loadHome = cache(async () => {
   return { overview, feed, board, tape }
 })
 
-export const metadata = { title: "Tape" }
+export const metadata = {
+  title: "Tape",
+  description: "Live tape of crypto calls from tracked X accounts, each priced at the minute it was posted and scored as it plays out.",
+}
 
 export default function HomePage() {
   return (

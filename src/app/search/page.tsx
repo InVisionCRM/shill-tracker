@@ -6,7 +6,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { searchAll } from "@/lib/queries"
 import { formatRoi, roiClass } from "@/lib/format"
 
-export const metadata = { title: "Search" }
+export const metadata = { title: "Search", description: "Find a tracked X account or a ticker and see every priced call." }
 
 export default function SearchPage({
   searchParams,

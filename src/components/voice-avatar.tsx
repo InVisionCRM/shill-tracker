@@ -1,3 +1,4 @@
+import { proxiedImage } from "@/lib/img"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 export function VoiceAvatar({
@@ -11,7 +12,7 @@ export function VoiceAvatar({
 }) {
   return (
     <Avatar className={className ?? "size-9"}>
-      <AvatarImage src={src || `/avatars/${username}`} alt="" />
+      <AvatarImage src={proxiedImage(src) ?? `/avatars/${username}`} alt="" />
       <AvatarFallback>{username.slice(0, 2).toUpperCase()}</AvatarFallback>
     </Avatar>
   )

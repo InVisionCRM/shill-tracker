@@ -1,6 +1,7 @@
 import { chainShort } from "@/lib/format"
 import { pulseAsset } from "@/lib/detect/pulse"
 import { cn } from "cn"
+import { proxiedImage } from "@/lib/img"
 
 const KNOWN: Record<string, string> = {
   BTC: "https://coin-images.coingecko.com/coins/images/1/small/bitcoin.png",
@@ -29,7 +30,7 @@ export function TokenLogo({
   const upper = symbol?.toUpperCase() ?? ""
   const pulse = chain === "pulsechain" ? pulseAsset(upper) : null
   const remote = imageUrl && (imageUrl.startsWith("https://") || imageUrl.startsWith("http://")) ? imageUrl : null
-  const src = remote ?? pulse?.logo ?? (upper ? KNOWN[upper] : null)
+  const src = proxiedImage(remote ?? pulse?.logo ?? (upper ? KNOWN[upper] : null))
   const badge = chainShort(chain)
   return (
     <span className={cn("relative inline-flex size-8 shrink-0", className)}>
@@ -39,7 +40,9 @@ export function TokenLogo({
         <img
           src={src}
           alt=""
-          loading={loading}
+          loading={loading ?? "lazy"}
+          width={32}
+          height={32}
           decoding="async"
           className="size-full rounded-full bg-card object-cover ring-1 ring-white/10"
         />

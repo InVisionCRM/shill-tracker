@@ -10,7 +10,7 @@ import { formatCompact, formatRoi, roiClass } from "@/lib/format"
 import { getLeaderboard } from "@/lib/queries"
 import { toLeader } from "@/lib/serialize"
 
-export const metadata = { title: "Voices" }
+export const metadata = { title: "Voices", description: "Every X account Shill Tracker follows, with call counts and credibility scores." }
 
 export default function VoicesPage() {
   return (

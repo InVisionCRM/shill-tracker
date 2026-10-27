@@ -1,5 +1,6 @@
 import { Client } from "pg"
 import { loadLocalEnv } from "../src/lib/env"
+import { normalizeSslMode } from "../src/lib/db/url"
 
 loadLocalEnv()
 
@@ -67,8 +68,8 @@ async function main() {
 
   // DB_DRIVER=neon-ws talks to Neon over WebSocket on 443, for hosts that cannot reach port 5432.
   const ClientImpl = process.env.DB_DRIVER === "neon-ws" ? await neonClient() : Client
-  const source = new ClientImpl({ connectionString: sourceUrl })
-  const dest = new ClientImpl({ connectionString: destUrl })
+  const source = new ClientImpl({ connectionString: normalizeSslMode(sourceUrl) })
+  const dest = new ClientImpl({ connectionString: normalizeSslMode(destUrl) })
   await source.connect()
   await dest.connect()
   const started = new Date()
