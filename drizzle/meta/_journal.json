@@ -15,6 +15,13 @@
       "when": 1793127600000,
       "tag": "0001_pulse_candles",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793200000000,
+      "tag": "0002_first_calls",
+      "breakpoints": true
     }
   ]
 }

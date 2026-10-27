@@ -1,6 +1,8 @@
 import { average, median } from "../format"
 import { WEIGHTS, ramp } from "./evaluate"
 
+export type ScoreMode = "first" | "all"
+
 export type StatMention = {
   id: string
   assetKey: string | null
@@ -14,6 +16,36 @@ export type StatMention = {
   pumpDumpFlag: boolean
   pumpDumpScore: number | null
   priceAt: number | null
+}
+
+/** Asset identity for "first call" grouping. Nameless rows stay their own group. */
+export function assetGroupKey(mention: {
+  id: string
+  assetKey: string | null
+  symbol: string | null
+}) {
+  if (mention.assetKey) return mention.assetKey
+  if (mention.symbol) return `sym:${mention.symbol.toUpperCase()}`
+  return mention.id
+}
+
+/** Earliest mention of each asset. Same timestamp breaks toward the smaller id. */
+export function firstCalls<T extends { id: string; assetKey: string | null; symbol: string | null; createdAt: number }>(
+  mentions: T[],
+): T[] {
+  const best = new Map<string, T>()
+  for (const mention of mentions) {
+    const key = assetGroupKey(mention)
+    const current = best.get(key)
+    if (
+      !current ||
+      mention.createdAt < current.createdAt ||
+      (mention.createdAt === current.createdAt && mention.id < current.id)
+    ) {
+      best.set(key, mention)
+    }
+  }
+  return [...best.values()]
 }
 
 export type HorizonStats = {
@@ -66,24 +98,28 @@ function primaryRoi(mention: StatMention) {
   return mention.roi7d ?? mention.roi24h ?? mention.roiNow ?? mention.roi1h ?? mention.roi30d
 }
 
-export function aggregateInfluencer(mentions: StatMention[]): InfluencerAggregate {
+export function aggregateInfluencer(
+  mentions: StatMention[],
+  mode: ScoreMode = "first",
+): InfluencerAggregate {
+  const scored = mode === "all" ? mentions : firstCalls(mentions)
   const horizons = {
-    "1h": horizonStats(nums(mentions, "1h")),
-    "24h": horizonStats(nums(mentions, "24h")),
-    "7d": horizonStats(nums(mentions, "7d")),
-    "30d": horizonStats(nums(mentions, "30d")),
-    now: horizonStats(nums(mentions, "now")),
+    "1h": horizonStats(nums(scored, "1h")),
+    "24h": horizonStats(nums(scored, "24h")),
+    "7d": horizonStats(nums(scored, "7d")),
+    "30d": horizonStats(nums(scored, "30d")),
+    now: horizonStats(nums(scored, "now")),
   }
 
   const chosen = chooseCredibilityHorizon(horizons)
   const sample = chosen ? horizons[chosen] : null
   const n = sample?.portfolioN ?? 0
 
-  const scored = mentions.filter((mention) => mention.pumpDumpScore != null)
-  const pumpDumpCount = mentions.filter((mention) => mention.pumpDumpFlag).length
-  const pumpDumpRate = scored.length ? pumpDumpCount / scored.length : null
+  const pumpScored = scored.filter((mention) => mention.pumpDumpScore != null)
+  const pumpDumpCount = scored.filter((mention) => mention.pumpDumpFlag).length
+  const pumpDumpRate = pumpScored.length ? pumpDumpCount / pumpScored.length : null
   const avgPumpScore = average(
-    scored.map((mention) => mention.pumpDumpScore).filter((value): value is number => value != null),
+    pumpScored.map((mention) => mention.pumpDumpScore).filter((value): value is number => value != null),
   )
 
   let credibilityScore: number | null = null
@@ -108,22 +144,22 @@ export function aggregateInfluencer(mentions: StatMention[]): InfluencerAggregat
     )
   }
 
-  const ranked = mentions
+  const ranked = scored
     .map((mention) => ({ mention, roi: primaryRoi(mention) }))
     .filter((row): row is { mention: StatMention; roi: number } => row.roi != null)
     .sort((a, b) => b.roi - a.roi)
 
   const keys = new Map<string, number>()
   for (const mention of mentions) {
-    const key = mention.assetKey ?? (mention.symbol ? `sym:${mention.symbol}` : null)
-    if (!key) continue
+    if (!mention.assetKey && !mention.symbol) continue
+    const key = assetGroupKey(mention)
     keys.set(key, (keys.get(key) ?? 0) + 1)
   }
 
   return {
     shillCount: mentions.length,
     uniqueTickers: keys.size,
-    pricedCount: mentions.filter((mention) => mention.priceAt != null).length,
+    pricedCount: scored.filter((mention) => mention.priceAt != null).length,
     horizons,
     bestMentionId: ranked[0]?.mention.id ?? null,
     worstMentionId: ranked.at(-1)?.mention.id ?? null,

@@ -25,7 +25,8 @@ async function Board() {
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Who called it, and who arrived after the pump.</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Credibility prefers the 7 day print once three calls have settled. Dump risk rises when the chart ran
-          before the post and faded after. Small samples are pulled toward uncertain, not innocent.
+          before the post and faded after. Small samples are pulled toward uncertain, not innocent. Sparklines
+          are the last first-call 7 day returns.
         </p>
       </div>
       <Leaderboard rows={rows} />

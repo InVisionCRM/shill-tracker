@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { aggregateInfluencer, equityCurve } from "./aggregate"
+import { aggregateInfluencer, equityCurve, firstCalls } from "./aggregate"
 import { evaluateCall, pumpDumpFromMoves } from "./evaluate"
 
 describe("pumpDumpFromMoves", () => {
@@ -72,17 +72,21 @@ describe("evaluateCall", () => {
 })
 
 describe("aggregateInfluencer", () => {
-  it("simulates a $100 stake per call and shrinks tiny samples", () => {
-    const stats = aggregateInfluencer([
-      mention("a", 0.2, false),
-      mention("b", -0.1, true),
-      mention("a", 0.05, false),
-    ])
+  const calls = [
+    mention("a", 0.2, false, 1, "m-a-1"),
+    mention("b", -0.1, true, 2, "m-b-2"),
+    mention("a", 0.05, false, 3, "m-a-3"),
+  ]
+
+  it("scores the first mention of each asset and still counts every shill", () => {
+    const stats = aggregateInfluencer(calls)
     expect(stats.shillCount).toBe(3)
     expect(stats.uniqueTickers).toBe(2)
     expect(stats.repeatAssets).toBe(1)
-    expect(stats.horizons["7d"].portfolioN).toBe(3)
-    expect(stats.horizons["7d"].portfolio).toBeCloseTo(100 * (1.2 + 0.9 + 1.05))
+    expect(stats.pricedCount).toBe(2)
+    expect(stats.horizons["7d"].portfolioN).toBe(2)
+    expect(stats.horizons["7d"].portfolio).toBeCloseTo(100 * (1.2 + 0.9))
+    expect(stats.pumpDumpCount).toBe(1)
     expect(stats.credibilityScore).not.toBeNull()
     expect(stats.dumpRiskScore).not.toBeNull()
     expect(stats.bestMentionId).toBe("m-a-1")
@@ -94,14 +98,41 @@ describe("aggregateInfluencer", () => {
     expect(curve.equity).toBeCloseTo(10)
     expect(curve.deployed).toBe(200)
   })
+
+  it("includes repeat mentions when asked", () => {
+    const stats = aggregateInfluencer(calls, "all")
+    expect(stats.shillCount).toBe(3)
+    expect(stats.repeatAssets).toBe(1)
+    expect(stats.pricedCount).toBe(3)
+    expect(stats.horizons["7d"].portfolioN).toBe(3)
+    expect(stats.horizons["7d"].portfolio).toBeCloseTo(100 * (1.2 + 0.9 + 1.05))
+  })
+
+  it("keeps the earlier call when a later mention returns more", () => {
+    const rows = [
+      mention("a", 0.05, false, 10, "m-early"),
+      mention("a", 2, false, 20, "m-late"),
+    ]
+    expect(firstCalls(rows).map((row) => row.id)).toEqual(["m-early"])
+    expect(aggregateInfluencer(rows).bestMentionId).toBe("m-early")
+    expect(aggregateInfluencer(rows, "all").bestMentionId).toBe("m-late")
+  })
+
+  it("breaks a timestamp tie toward the smaller id", () => {
+    const rows = [
+      mention("a", 0.1, false, 5, "m-b"),
+      mention("a", 0.4, false, 5, "m-a"),
+    ]
+    expect(firstCalls(rows).map((row) => row.id)).toEqual(["m-a"])
+  })
 })
 
-function mention(symbol: string, roi7d: number, flag: boolean) {
+function mention(symbol: string, roi7d: number, flag: boolean, createdAt = 1, id?: string) {
   return {
-    id: `m-${symbol}-${roi7d > 0 ? 1 : 2}`,
+    id: id ?? `m-${symbol}-${createdAt}`,
     assetKey: `cg:${symbol}`,
     symbol,
-    createdAt: roi7d > 0 ? 1 : 2,
+    createdAt,
     roi1h: null,
     roi24h: null,
     roi7d,

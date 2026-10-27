@@ -31,7 +31,8 @@ async function Voices() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">Tracked accounts</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Add a handle here or with POST /api/influencers. The bot learns who to poll from GET /api/influencers,
-            which skips demo voices.
+            which skips demo voices. The 7 day median is each voice&apos;s first call on a ticker. Shill count is
+            every mention.
           </p>
         </div>
         <TrackVoiceDialog />

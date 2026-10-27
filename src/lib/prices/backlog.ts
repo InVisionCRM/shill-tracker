@@ -1,6 +1,7 @@
-import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { getDb } from "../db"
 import { candleDays, mentions } from "../db/schema"
+import { callRankWindow } from "../scoring/call-rank"
 import { downsample, evaluateCall } from "../scoring/evaluate"
 import { cachedDays, dayStart, firstGap, loadCandles, storeDays, windowDays } from "./candles"
 import { fetchHistory } from "./history"
@@ -20,6 +21,7 @@ type Row = {
   geckoterminalNetwork: string | null
   priceAttempts: number
   priceStatus: string
+  callRank: number
 }
 
 export async function priceFromCache(options: {
@@ -29,50 +31,101 @@ export async function priceFromCache(options: {
   startedAt: number
 }) {
   const db = getDb()
-  const selected = await db
-    .select({
-      id: mentions.id,
-      influencerId: mentions.influencerId,
-      assetKey: mentions.assetKey,
-      createdAt: mentions.createdAt,
-      binanceSymbol: mentions.binanceSymbol,
-      coingeckoId: mentions.coingeckoId,
-      chain: mentions.chain,
-      pairAddress: mentions.pairAddress,
-      geckoterminalNetwork: mentions.geckoterminalNetwork,
-      priceAttempts: mentions.priceAttempts,
-      priceStatus: mentions.priceStatus,
-    })
-    .from(mentions)
-    .where(
-      and(
-        eq(mentions.pinned, false),
-        or(
-          eq(mentions.resolutionStatus, "resolved"),
-          sql`${mentions.coingeckoId} is not null`,
-          sql`${mentions.binanceSymbol} is not null`,
-          sql`${mentions.pairAddress} is not null`,
-        ),
-        or(
-          inArray(mentions.priceStatus, ["pending", "partial"]),
-          and(isNull(mentions.price1h), lt(mentions.createdAt, new Date(Date.now() - HOUR))),
-          and(isNull(mentions.price24h), lt(mentions.createdAt, new Date(Date.now() - DAY))),
-          and(isNull(mentions.price7d), lt(mentions.createdAt, new Date(Date.now() - 7 * DAY))),
-          and(isNull(mentions.price30d), lt(mentions.createdAt, new Date(Date.now() - 30 * DAY))),
-        ),
-      ),
+  const hourAgo = new Date(Date.now() - HOUR)
+  const dayAgo = new Date(Date.now() - DAY)
+  const weekAgo = new Date(Date.now() - 7 * DAY)
+  const monthAgo = new Date(Date.now() - 30 * DAY)
+  const selected = await db.execute(sql`
+    with ranked as (
+      select id, ${callRankWindow} as call_rank
+      from mentions
     )
-    .orderBy(asc(mentions.priceAttempts), asc(mentions.createdAt))
-    .limit(options.limit)
+    select
+      m.id,
+      m.influencer_id,
+      m.asset_key,
+      m.created_at,
+      m.binance_symbol,
+      m.coingecko_id,
+      m.chain,
+      m.pair_address,
+      m.geckoterminal_network,
+      m.price_attempts,
+      m.price_status,
+      r.call_rank
+    from mentions m
+    join ranked r on r.id = m.id
+    where m.pinned = false
+      and m.asset_key is not null
+      and (
+        m.resolution_status = 'resolved'
+        or m.coingecko_id is not null
+        or m.binance_symbol is not null
+        or m.pair_address is not null
+      )
+      and (
+        m.price_status in ('pending', 'partial')
+        or (m.price_1h is null and m.created_at < ${hourAgo})
+        or (m.price_24h is null and m.created_at < ${dayAgo})
+        or (m.price_7d is null and m.created_at < ${weekAgo})
+        or (m.price_30d is null and m.created_at < ${monthAgo})
+      )
+      and not (m.price_status = 'unavailable' and m.price_attempts >= 5)
+      and (
+        r.call_rank = 1
+        or not exists (
+          select 1
+          from mentions m2
+          join ranked r2 on r2.id = m2.id
+          where r2.call_rank = 1
+            and m2.pinned = false
+            and m2.price_at is null
+            and m2.price_status in ('pending', 'partial')
+        )
+      )
+    order by r.call_rank asc, m.price_attempts asc, m.created_at asc
+    limit ${options.limit}
+  `)
 
-  const rows: Row[] = selected.filter((row): row is Row => Boolean(row.assetKey))
+  const rows: Row[] = resultRows<{
+    id: string
+    influencer_id: string
+    asset_key: string
+    created_at: Date | string
+    binance_symbol: string | null
+    coingecko_id: string | null
+    chain: string | null
+    pair_address: string | null
+    geckoterminal_network: string | null
+    price_attempts: number
+    price_status: string
+    call_rank: number | string
+  }>(selected).map((row) => ({
+    id: row.id,
+    influencerId: row.influencer_id,
+    assetKey: row.asset_key,
+    createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+    binanceSymbol: row.binance_symbol,
+    coingeckoId: row.coingecko_id,
+    chain: row.chain,
+    pairAddress: row.pair_address,
+    geckoterminalNetwork: row.geckoterminal_network,
+    priceAttempts: Number(row.price_attempts),
+    priceStatus: row.price_status,
+    callRank: Number(row.call_rank),
+  }))
   const groups = new Map<string, Row[]>()
   for (const row of rows) {
     const list = groups.get(row.assetKey) ?? []
     list.push(row)
     groups.set(row.assetKey, list)
   }
-  const ordered = [...groups.entries()].sort((a, b) => b[1].length - a[1].length)
+  const ordered = [...groups.entries()].sort((a, b) => {
+    const rankA = Math.min(...a[1].map((row) => row.callRank))
+    const rankB = Math.min(...b[1].map((row) => row.callRank))
+    if (rankA !== rankB) return rankA - rankB
+    return b[1].length - a[1].length
+  })
 
   let fetches = 0
   let failed = 0
@@ -89,7 +142,8 @@ export async function priceFromCache(options: {
     haveByAsset.set(assetKey, have)
     const missing = [...needed].filter((day) => !have.has(day))
     const gap = firstGap(missing, 40)
-    if (!gap.length || fetches >= options.assetFetches) continue
+    if (!gap.length) continue
+    if (fetches >= options.assetFetches) break
     if (Date.now() - options.startedAt > options.budgetMs) break
     const sample = group[0]
     try {
@@ -124,7 +178,9 @@ export async function priceFromCache(options: {
     if (Date.now() - options.startedAt > options.budgetMs) break
     const have = haveByAsset.get(assetKey)
     if (!have) continue
-    const ready = group.filter((row) => windowDays(row.createdAt.getTime()).every((day) => have.has(day)))
+    const ready = group
+      .filter((row) => windowDays(row.createdAt.getTime()).every((day) => have.has(day)))
+      .sort((a, b) => a.callRank - b.callRank)
     if (!ready.length) continue
     if (!loaded.has(assetKey)) loaded.set(assetKey, await loadCandles(assetKey, [...have]))
     const candles = loaded.get(assetKey) ?? []
@@ -201,4 +257,11 @@ export async function priceFromCache(options: {
   }
 
   return { priced, failed, fetches, touched: [...touched] }
+}
+
+function resultRows<T>(result: unknown): T[] {
+  if (result && typeof result === "object" && "rows" in result && Array.isArray(result.rows)) {
+    return result.rows as T[]
+  }
+  return Array.isArray(result) ? (result as T[]) : []
 }

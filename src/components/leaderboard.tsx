@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { formatCompact, formatRoi, formatUsd, roiClass, dumpTone, scoreTone } from "@/lib/format"
-import type { LeaderRow } from "@/lib/types"
+import type { LeaderRow, ScoreSnapshot } from "@/lib/types"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -24,6 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Sparkline } from "./sparkline"
 import { VoiceAvatar } from "./voice-avatar"
+import { ScopeToggle } from "./scope-toggle"
 
 const SORTS = [
   { value: "credibility", label: "Credibility" },
@@ -41,18 +42,28 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
   const [query, setQuery] = useState("")
   const [sort, setSort] = useState<SortKey>("credibility")
   const [minShills, setMinShills] = useState("1")
+  const [mode, setMode] = useState<"first" | "all">("first")
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const min = Number(minShills) || 0
     return rows
+      .map((row) => leaderView(row, mode))
       .filter((row) => row.shillCount >= min)
       .filter((row) => !needle || row.username.includes(needle) || row.name.toLowerCase().includes(needle))
       .slice()
       .sort((a, b) => compare(a, b, sort))
-  }, [rows, query, sort, minShills])
+  }, [rows, query, sort, minShills, mode])
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <ScopeToggle value={mode} onChange={setMode} />
+        <p className="text-xs leading-5 text-muted-foreground sm:max-w-sm sm:text-right">
+          {mode === "first"
+            ? "Ranked on each voice's first mention of a ticker. Shill count is every mention."
+            : "Ranked on every mention. Shill count stays the total."}
+        </p>
+      </div>
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input
           value={query}
@@ -198,6 +209,29 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
       </div>
     </div>
   )
+}
+
+function leaderView(row: LeaderRow, mode: "first" | "all"): LeaderRow {
+  if (mode === "first" || !row.allScores) return row
+  const scores: ScoreSnapshot = row.allScores
+  return {
+    ...row,
+    pricedCount: scores.pricedCount,
+    winRate24h: scores.winRate24h,
+    winRate7d: scores.winRate7d,
+    medianRoi24h: scores.medianRoi24h,
+    medianRoi7d: scores.medianRoi7d,
+    portfolio7d: scores.portfolio7d,
+    portfolioN7d: scores.portfolioN7d,
+    portfolioNow: scores.portfolioNow,
+    portfolioNNow: scores.portfolioNNow,
+    pumpDumpCount: scores.pumpDumpCount,
+    pumpDumpRate: scores.pumpDumpRate,
+    dumpRiskScore: scores.dumpRiskScore,
+    credibilityScore: scores.credibilityScore,
+    credibilityHorizon: scores.credibilityHorizon,
+    sampleSize: scores.sampleSize,
+  }
 }
 
 function compare(a: LeaderRow, b: LeaderRow, sort: SortKey) {

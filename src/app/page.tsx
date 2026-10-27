@@ -48,21 +48,29 @@ async function Home() {
             {overview.demoVoices} demo voices in the book
           </Badge>
         ) : null}
-        {overview.shills > 0 && overview.priced < overview.shills ? (
+        {overview.progress.phase === "first" ? (
           <p className="font-mono text-xs text-muted-foreground">
-            Pricing {overview.priced.toLocaleString()} / {overview.shills.toLocaleString()} calls
+            Pricing first calls {overview.firstPriced.toLocaleString()} / {overview.firstTotal.toLocaleString()}
+          </p>
+        ) : overview.progress.phase === "repeat" ? (
+          <p className="font-mono text-xs text-muted-foreground">
+            Pricing repeats {overview.progress.priced.toLocaleString()} / {overview.progress.total.toLocaleString()}
           </p>
         ) : null}
       </section>
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Voices" value={formatCompact(overview.voices)} />
         <Stat label="Posts archived" value={formatCompact(overview.posts)} />
-        <Stat label="Shills" value={formatCompact(overview.shills)} detail={`${overview.priced} priced`} />
+        <Stat
+          label="Shills"
+          value={formatCompact(overview.shills)}
+          detail={`${overview.firstTotal.toLocaleString()} first calls`}
+        />
         <Stat
           label="Median 7d"
           value={formatRoi(overview.median7d)}
           className={roiClass(overview.median7d)}
-          detail={`${overview.flagged} dump flags`}
+          detail={`${overview.flagged} first-call dump flags`}
         />
       </section>
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">

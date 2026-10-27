@@ -1,4 +1,4 @@
-import type { FeedDTO, LeaderRow } from "./types"
+import type { FeedDTO, LeaderRow, ScoreSnapshot } from "./types"
 
 type FeedRow = {
   id: string
@@ -60,6 +60,7 @@ type LeaderSource = {
   credibilityHorizon: string | null
   sampleSize: number | null
   repeatAssets: number | null
+  allScores: ScoreSnapshot | null
 }
 
 export function toLeader(row: LeaderSource): LeaderRow {
@@ -74,5 +75,6 @@ export function toLeader(row: LeaderSource): LeaderRow {
     pumpDumpCount: row.pumpDumpCount ?? 0,
     sampleSize: row.sampleSize ?? 0,
     repeatAssets: row.repeatAssets ?? 0,
+    allScores: row.allScores ?? null,
   }
 }

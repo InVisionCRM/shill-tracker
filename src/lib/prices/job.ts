@@ -4,6 +4,7 @@ import { PULSE_BOOK, dexUrl } from "../detect/pulse"
 import { getDb } from "../db"
 import { cronRuns, influencers, mentions, quotes } from "../db/schema"
 import { priceFromCache } from "./backlog"
+import { callRankWindow } from "../scoring/call-rank"
 import { getPricingProgress } from "../queries"
 import { assetKeyOf } from "../format"
 import { WEIGHTS, evaluateCall } from "../scoring/evaluate"
@@ -32,18 +33,37 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
       detail.resolved = pulseResolved
     }
     const resolveLimit = inline ? limit : Math.min(6, limit)
-    const pending = await db
-      .select()
-      .from(mentions)
-      .where(
-        and(
-          eq(mentions.pinned, false),
-          eq(mentions.resolutionStatus, "pending"),
-          options?.mentionIds?.length ? inArray(mentions.id, options.mentionIds) : undefined,
-        ),
-      )
-      .orderBy(asc(mentions.createdAt))
-      .limit(resolveLimit)
+    const pendingIds = options?.mentionIds?.length
+      ? options.mentionIds.slice(0, resolveLimit)
+      : resultRows<{ id: string }>(
+          await db.execute(sql`
+            with ranked as (
+              select id, ${callRankWindow} as call_rank
+              from mentions
+            )
+            select m.id
+            from mentions m
+            join ranked r on r.id = m.id
+            where m.pinned = false
+              and m.resolution_status = 'pending'
+            order by r.call_rank asc, m.created_at asc
+            limit ${resolveLimit}
+          `),
+        ).map((row) => row.id)
+    const pending = pendingIds.length
+      ? await db
+          .select()
+          .from(mentions)
+          .where(
+            and(
+              eq(mentions.pinned, false),
+              eq(mentions.resolutionStatus, "pending"),
+              inArray(mentions.id, pendingIds),
+            ),
+          )
+      : []
+    const pendingOrder = new Map(pendingIds.map((id, index) => [id, index]))
+    pending.sort((a, b) => (pendingOrder.get(a.id) ?? 0) - (pendingOrder.get(b.id) ?? 0))
 
     for (const mention of pending) {
       try {
@@ -469,4 +489,11 @@ export async function refreshQuotes() {
     `)
   }
   return prices.size
+}
+
+function resultRows<T>(result: unknown): T[] {
+  if (result && typeof result === "object" && "rows" in result && Array.isArray(result.rows)) {
+    return result.rows as T[]
+  }
+  return Array.isArray(result) ? (result as T[]) : []
 }

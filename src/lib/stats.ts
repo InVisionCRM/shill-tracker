@@ -1,7 +1,8 @@
 import { getTableColumns, inArray } from "drizzle-orm"
 import { getDb } from "./db"
 import { influencerStats, mentions, posts } from "./db/schema"
-import { aggregateInfluencer, type StatMention } from "./scoring/aggregate"
+import { aggregateInfluencer, type InfluencerAggregate, type StatMention } from "./scoring/aggregate"
+import type { ScoreSnapshot } from "./types"
 
 export async function recomputeInfluencers(influencerIds?: string[]) {
   const db = getDb()
@@ -48,7 +49,9 @@ export async function recomputeInfluencers(influencerIds?: string[]) {
   }
 
   for (const influencerId of ids) {
-    const aggregate = aggregateInfluencer(mentionsBy.get(influencerId) ?? [])
+    const rows = mentionsBy.get(influencerId) ?? []
+    const aggregate = aggregateInfluencer(rows, "first")
+    const allScores = scoreSnapshot(aggregateInfluencer(rows, "all"))
     const values = {
       influencerId,
       shillCount: aggregate.shillCount,
@@ -90,6 +93,7 @@ export async function recomputeInfluencers(influencerIds?: string[]) {
       credibilityScore: aggregate.credibilityScore,
       credibilityHorizon: aggregate.credibilityHorizon,
       sampleSize: aggregate.sampleSize,
+      allScores,
       computedAt: new Date(),
     }
     await db
@@ -102,4 +106,44 @@ export async function recomputeInfluencers(influencerIds?: string[]) {
   }
 
   return ids.size
+}
+
+export function scoreSnapshot(aggregate: InfluencerAggregate): ScoreSnapshot {
+  return {
+    pricedCount: aggregate.pricedCount,
+    winRate1h: aggregate.horizons["1h"].winRate,
+    winRate24h: aggregate.horizons["24h"].winRate,
+    winRate7d: aggregate.horizons["7d"].winRate,
+    winRate30d: aggregate.horizons["30d"].winRate,
+    winRateNow: aggregate.horizons.now.winRate,
+    avgRoi1h: aggregate.horizons["1h"].avgRoi,
+    avgRoi24h: aggregate.horizons["24h"].avgRoi,
+    avgRoi7d: aggregate.horizons["7d"].avgRoi,
+    avgRoi30d: aggregate.horizons["30d"].avgRoi,
+    avgRoiNow: aggregate.horizons.now.avgRoi,
+    medianRoi1h: aggregate.horizons["1h"].medianRoi,
+    medianRoi24h: aggregate.horizons["24h"].medianRoi,
+    medianRoi7d: aggregate.horizons["7d"].medianRoi,
+    medianRoi30d: aggregate.horizons["30d"].medianRoi,
+    medianRoiNow: aggregate.horizons.now.medianRoi,
+    portfolio1h: aggregate.horizons["1h"].portfolio,
+    portfolio24h: aggregate.horizons["24h"].portfolio,
+    portfolio7d: aggregate.horizons["7d"].portfolio,
+    portfolio30d: aggregate.horizons["30d"].portfolio,
+    portfolioNow: aggregate.horizons.now.portfolio,
+    portfolioN1h: aggregate.horizons["1h"].portfolioN,
+    portfolioN24h: aggregate.horizons["24h"].portfolioN,
+    portfolioN7d: aggregate.horizons["7d"].portfolioN,
+    portfolioN30d: aggregate.horizons["30d"].portfolioN,
+    portfolioNNow: aggregate.horizons.now.portfolioN,
+    bestMentionId: aggregate.bestMentionId,
+    worstMentionId: aggregate.worstMentionId,
+    pumpDumpCount: aggregate.pumpDumpCount,
+    pumpDumpRate: aggregate.pumpDumpRate,
+    avgPumpScore: aggregate.avgPumpScore,
+    dumpRiskScore: aggregate.dumpRiskScore,
+    credibilityScore: aggregate.credibilityScore,
+    credibilityHorizon: aggregate.credibilityHorizon,
+    sampleSize: aggregate.sampleSize,
+  }
 }

@@ -12,6 +12,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
+import type { ScoreSnapshot } from "../types"
 
 export type Candle = { t: number; p: number; v: number }
 
@@ -184,6 +185,8 @@ export const influencerStats = pgTable("influencer_stats", {
   credibilityScore: doublePrecision("credibility_score"),
   credibilityHorizon: text("credibility_horizon"),
   sampleSize: integer("sample_size").notNull().default(0),
+  /** ROI, win rate, book, and dump scores if every mention is included. Null until the next recompute. */
+  allScores: jsonb("all_scores").$type<ScoreSnapshot>(),
   computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
 })
 

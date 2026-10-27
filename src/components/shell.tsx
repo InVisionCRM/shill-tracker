@@ -152,13 +152,17 @@ function LiveDot() {
 
 function PricingBar() {
   const { progress } = useLive()
-  if (!progress || progress.total === 0 || progress.priced >= progress.total) return null
-  const width = Math.max(4, Math.round((progress.priced / progress.total) * 100))
+  if (!progress || progress.phase === "done" || progress.total === 0) return null
+  const width = Math.max(4, Math.round((progress.priced / Math.max(progress.total, 1)) * 100))
+  const label =
+    progress.phase === "repeat"
+      ? `Pricing repeats ${progress.priced.toLocaleString()} / ${progress.total.toLocaleString()}`
+      : `Pricing first calls ${progress.firstPriced.toLocaleString()} / ${progress.firstTotal.toLocaleString()}`
   return (
     <div className="border-t px-4 py-1.5">
       <div className="mx-auto flex max-w-6xl items-center gap-3">
         <p className="shrink-0 font-mono text-[10px] tracking-wide text-muted-foreground uppercase">
-          Pricing {progress.priced.toLocaleString()} / {progress.total.toLocaleString()} calls
+          {label}
         </p>
         <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
           <div className="h-full bg-phosphor" style={{ width: `${width}%` }} />

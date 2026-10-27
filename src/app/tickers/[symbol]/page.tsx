@@ -1,13 +1,10 @@
 import { Suspense } from "react"
 import Link from "next/link"
 import { connection } from "next/server"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
-import { RelativeTime } from "@/components/animated-number"
-import { MarkRoi } from "@/components/mark"
 import { TokenLogo } from "@/components/token-logo"
-import { chainLabel, formatRoi, formatUsd, roiClass, shortAddress } from "@/lib/format"
+import { TickerBoard } from "@/components/ticker-board"
+import { chainLabel, formatCallDate, formatUsd, shortAddress } from "@/lib/format"
 import { getTicker } from "@/lib/queries"
 
 export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }) {
@@ -26,32 +23,38 @@ export default function TickerPage({ params }: { params: Promise<{ symbol: strin
 async function Ticker({ params }: { params: Promise<{ symbol: string }> }) {
   await connection()
   const { symbol } = await params
-  const { query, rows, total, avg7d } = await getTicker(symbol)
-  const first = rows[0]?.mentions
-  const avg = avg7d
+  const { query, rows, total, avg7d, avgFirst7d, firstCalls } = await getTicker(symbol)
+  const earliest = firstCalls[0] ?? null
+  const logoSymbol = earliest?.symbol ?? rows[0]?.mentions.symbol ?? query
+  const logoChain = earliest?.chain ?? rows[0]?.mentions.chain
   const chains = [
-    ...new Set(rows.map((row) => row.mentions.chain).filter((chain): chain is string => Boolean(chain))),
+    ...new Set(
+      [...firstCalls.map((call) => call.chain), ...rows.map((row) => row.mentions.chain)].filter(
+        (chain): chain is string => Boolean(chain),
+      ),
+    ),
   ]
+  const firstByUser = new Map(firstCalls.map((call) => [call.username, call]))
   return (
     <div className="flex flex-col gap-6">
       <header>
         <p className="font-mono text-xs tracking-[0.18em] text-phosphor uppercase">Ticker</p>
         <div className="mt-2 flex items-center gap-3">
-          <TokenLogo symbol={first?.symbol ?? query} chain={first?.chain} className="size-12" />
+          <TokenLogo symbol={logoSymbol} chain={logoChain} className="size-12" />
           <h1 className="text-3xl font-semibold tracking-tight">
-            {first?.symbol ? `$${first.symbol}` : query}
+            {logoSymbol ? `$${logoSymbol}` : query}
           </h1>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          {first?.assetName ?? "No resolved name yet"} · {total} calls
+          {(earliest?.assetName ?? rows[0]?.mentions.assetName) ?? "No resolved name yet"} · {total} mentions ·{" "}
+          {firstCalls.length} first calls
           {chains.length ? ` · ${chains.map((chain) => chainLabel(chain)).join(", ")}` : ""}
-          {first?.contractAddress ? ` · ${shortAddress(first.contractAddress)}` : ""}
+          {(earliest?.contractAddress ?? rows[0]?.mentions.contractAddress)
+            ? ` · ${shortAddress(earliest?.contractAddress ?? rows[0]?.mentions.contractAddress)}`
+            : ""}
         </p>
-        {total > rows.length ? (
-          <p className="mt-1 text-xs text-muted-foreground">Showing the newest {rows.length}.</p>
-        ) : null}
       </header>
-      {rows.length === 0 ? (
+      {rows.length === 0 && firstCalls.length === 0 ? (
         <Empty className="border">
           <EmptyHeader>
             <EmptyTitle>No calls for {query}</EmptyTitle>
@@ -60,63 +63,69 @@ async function Ticker({ params }: { params: Promise<{ symbol: string }> }) {
         </Empty>
       ) : (
         <>
-          <section className="grid gap-3 sm:grid-cols-3">
-            <Card>
-              <CardHeader>
-                <CardDescription>Voices</CardDescription>
-                <CardTitle className="font-mono text-2xl">
-                  {new Set(rows.map((row) => row.influencers.username)).size}
-                </CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardDescription>Average 7d</CardDescription>
-                <CardTitle className={`font-mono text-2xl ${roiClass(avg)}`}>{formatRoi(avg)}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardDescription>Latest entry</CardDescription>
-                <CardTitle className="font-mono text-2xl">{formatUsd(first?.priceAt ?? null)}</CardTitle>
-              </CardHeader>
-            </Card>
-          </section>
-          <Card>
-            <CardHeader>
-              <CardTitle>Who said it</CardTitle>
-              <CardDescription>Same asset, every voice, newest first.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              {rows.map((row) => (
-                <Link
-                  key={row.mentions.id}
-                  href={`/shills/${row.mentions.id}`}
-                  className="flex flex-col gap-2 rounded-lg border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <span>
-                    <span className="block font-medium">{row.influencers.name}</span>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      @{row.influencers.username} · <RelativeTime iso={row.mentions.createdAt.toISOString()} />
-                    </span>
-                  </span>
-                  <span className="flex flex-wrap items-center gap-2 text-sm">
-                    {row.mentions.pumpDumpFlag ? <Badge variant="destructive">Dump</Badge> : null}
-                    {row.mentions.confidence === "low" ? <Badge variant="outline">Low confidence</Badge> : null}
-                    <span className={roiClass(row.mentions.roi7d)}>7d {formatRoi(row.mentions.roi7d)}</span>
-                    <MarkRoi
-                      assetKey={row.mentions.assetKey}
-                      priceAt={row.mentions.priceAt}
-                      fallbackRoi={row.mentions.roiNow}
-                      fallbackPrice={row.mentions.priceNow}
-                      pinned={row.mentions.pinned}
-                      source={row.mentions.priceSource}
-                    />
-                  </span>
-                </Link>
-              ))}
-            </CardContent>
-          </Card>
+          {earliest ? (
+            <Link
+              href={`/shills/${earliest.id}`}
+              className="glass-card flex flex-col gap-2 rounded-2xl p-4 sm:flex-row sm:items-end sm:justify-between"
+            >
+              <span>
+                <span className="font-mono text-xs tracking-[0.16em] text-phosphor uppercase">First call</span>
+                <span className="mt-1 block text-lg font-medium">
+                  {earliest.name} <span className="font-mono text-sm text-muted-foreground">@{earliest.username}</span>
+                </span>
+                <span className="mt-1 block font-mono text-sm text-muted-foreground">{formatCallDate(earliest.createdAt)}</span>
+              </span>
+              <span className="font-mono text-3xl tabular-nums text-phosphor">{formatUsd(earliest.priceAt)}</span>
+            </Link>
+          ) : null}
+          <TickerBoard
+            avgFirst7d={avgFirst7d}
+            avgAll7d={avg7d}
+            total={total}
+            firstCalls={firstCalls.map((call) => ({
+              id: call.id,
+              username: call.username,
+              name: call.name,
+              createdAt: call.createdAt.toISOString(),
+              priceAt: call.priceAt,
+              roi7d: call.roi7d,
+              roiNow: call.roiNow,
+              priceNow: call.priceNow,
+              assetKey: call.assetKey,
+              pinned: call.pinned,
+              priceSource: call.priceSource,
+              pumpDumpFlag: call.pumpDumpFlag,
+              confidence: call.confidence,
+              symbol: call.symbol,
+              mentionCount: call.mentionCount,
+            }))}
+            mentions={rows.map((row) => {
+              const first = firstByUser.get(row.influencers.username)
+              return {
+                id: row.mentions.id,
+                username: row.influencers.username,
+                name: row.influencers.name,
+                createdAt: row.mentions.createdAt.toISOString(),
+                priceAt: row.mentions.priceAt,
+                roi7d: row.mentions.roi7d,
+                roiNow: row.mentions.roiNow,
+                priceNow: row.mentions.priceNow,
+                assetKey: row.mentions.assetKey,
+                pinned: row.mentions.pinned,
+                priceSource: row.mentions.priceSource,
+                pumpDumpFlag: row.mentions.pumpDumpFlag,
+                confidence: row.mentions.confidence,
+                symbol: row.mentions.symbol,
+                mentionCount: first?.mentionCount ?? 1,
+                isFirstCall: first?.id === row.mentions.id,
+                firstCallAt: (first?.createdAt ?? row.mentions.createdAt).toISOString(),
+                firstCallPrice: first?.priceAt ?? row.mentions.priceAt,
+              }
+            })}
+          />
+          {total > rows.length ? (
+            <p className="text-xs text-muted-foreground">All mentions shows the newest {rows.length}.</p>
+          ) : null}
         </>
       )}
     </div>

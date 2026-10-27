@@ -22,6 +22,25 @@ export function assetKeyOf(input: {
   return null
 }
 
+export function formatCallDate(value: Date | string | number | null | undefined) {
+  if (value == null || value === "") return "—"
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+  const day = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date)
+  const time = new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "UTC",
+  }).format(date)
+  return `${day} · ${time} UTC`
+}
+
 export function formatUsd(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "—"
   const abs = Math.abs(value)

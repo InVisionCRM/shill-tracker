@@ -198,11 +198,11 @@ GET or POST /api/cron/scores
 Authorization: Bearer $CRON_SECRET
 ```
 
-`/api/cron/prices` resolves a few pending assets, fills a candle-day cache, prices every fully covered call in the batch, refreshes current marks, and recomputes scores for voices that just got prices. With no `limit` query it works through up to 400 calls. An explicit `?limit=4` still means 4. Each run fetches at most two assets and at most about 40 missing days per asset, and stops around 35 seconds so a 60 second function can finish.
+`/api/cron/prices` resolves a few pending assets, fills a candle-day cache, prices every fully covered call in the batch, refreshes current marks, and recomputes scores for voices that just got prices. The queue prices each voice's first mention of an asset before any repeat. With no `limit` query it works through up to 400 calls. An explicit `?limit=4` still means 4. Each run fetches at most two assets and at most about 40 missing days per asset, and stops around 35 seconds so a 60 second function can finish.
 
 `/api/cron/scores` only recomputes aggregates. List queries omit the candle series so a voice with tens of thousands of mentions does not load that JSON.
 
-`vercel.json` schedules both jobs once a day (06:00 and 06:30 UTC), which is what Vercel Hobby allows. An external caller can hit the same routes with `CRON_SECRET` as often as you need to drain a backlog. The home tape shows `Pricing X / Y calls` while any calls are still queued.
+`vercel.json` schedules both jobs once a day (06:00 and 06:30 UTC), which is what Vercel Hobby allows. An external caller can hit the same routes with `CRON_SECRET` as often as you need to drain a backlog. The home tape shows `Pricing first calls X / Y` until those entry prices exist, then `Pricing repeats X / Y`. Repeats are priced only after every first call has an entry, or has been marked unavailable.
 
 Repeated tickers reuse `candle_days`. A day that was fetched and had no prints is stored empty so it is not requested again. GeckoTerminal returns at most 1000 hourly candles per call, so a multi-year HEX history continues across runs.
 
@@ -218,7 +218,8 @@ The in-app method page (`/methodology`) is the formula, and it renders the same 
 - Pump-then-dump score compares the run-up in the 24h and 7d **before** the post with the return **after**, plus a volume check. A flag means the chart had already run and then gave it back. It is not a claim about intent.
 - Credibility prefers the 7 day print once three calls have settled, then 24h, then 1h. Small samples are shrunk toward uncertain.
 - Dump risk is the flag rate, the average pump score, and how negative the median return is, shrunk toward a prior so a handful of calls cannot read as 100.
-- The $100 book stakes $100 in every call at the entry candle and holds for the horizon you pick. Two tickers in one post are two stakes. No fees.
+- The headline unit is a voice's first mention of each asset. ROI, win rate, the $100 book, pump-then-dump totals, and leaderboard rank use those first calls. A toggle includes every mention. Shill count and repeat-shill counts always use the full archive. Every mention is still stored, and each one keeps its own pump score.
+- The $100 book stakes $100 at the entry candle and holds for the horizon you pick. On first calls, naming the same ticker again is not a second stake. Two tickers in one post are two stakes. No fees.
 
 ## Limits
 

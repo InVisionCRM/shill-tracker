@@ -109,9 +109,15 @@ export default function MethodologyPage() {
           calls do not automatically read as 100.
         </p>
         <p className="text-sm leading-6">
-          The $100 book buys one stake per call at the entry candle and holds to the horizon you pick. Missing
-          prints are left out of that horizon and counted in the “n of m” line. Repeat shills are assets named more
-          than once by the same voice.
+          The headline score is the first mention of each asset by that voice. ROI, win rate, the $100 book,
+          pump-then-dump totals, and the leaderboard use those first calls unless you switch the page to every
+          mention. Shill count stays the total number of mentions, and repeat shills stay the assets named more
+          than once. Each mention still keeps its own pump score.
+        </p>
+        <p className="text-sm leading-6">
+          The $100 book buys one stake per scored call at the entry candle and holds to the horizon you pick.
+          Missing prints are left out of that horizon. On first calls, a ticker the voice names again is not a
+          second stake. Repeat shills are assets named more than once by the same voice.
         </p>
       </section>
 
