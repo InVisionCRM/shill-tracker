@@ -29,7 +29,13 @@ Other commands:
 | `pnpm smoke` | Hits a running server: add a voice, ingest a post twice, run the price cron |
 | `pnpm db:generate` | Regenerate SQL after a schema change |
 
-Migrations live in `drizzle/`. `pnpm db:migrate` uses the direct `DATABASE_URL` from `.env.local` or `.env`. On Neon, point migrations at the **direct** connection string (hostname without `-pooler`) and the app at the **pooled** string.
+Migrations live in `drizzle/`. Apply them with:
+
+```bash
+npm run db:migrate
+```
+
+That command reads `DATABASE_URL_UNPOOLED` when it is set, and otherwise `DATABASE_URL`. The running app only needs `DATABASE_URL`, `INGEST_SECRET`, and `CRON_SECRET`. On Neon, put the direct URL (hostname without `-pooler`) in `DATABASE_URL_UNPOOLED` and the pooled URL in `DATABASE_URL`. A Vercel deploy runs the same migration from `vercel-build` before `next build`. `pnpm db:migrate` is the same script.
 
 ## Environment
 
