@@ -45,6 +45,31 @@ export async function fetchHistory(
   const errors: string[] = []
   const olderThanGt = fromMs < Date.now() - GT_HISTORY_MS
   const olderThanCg = fromMs < Date.now() - CG_HISTORY_MS
+  // PulseChain tokens are priced from on-chain PulseX reserves first. The public RPC may lack archive
+  // state for old blocks, so an on-chain miss falls through to the free APIs. If none of them has real
+  // data either, the price stays unverifiable. Nothing is ever estimated.
+  let pulseUnverifiable = false
+  if (target.chain === "pulsechain" && target.contractAddress) {
+    const localPairs = await pulsePairsFor(target.contractAddress)
+    const atBlock = estimatePulseBlock(Math.floor(postedAt / 1000))
+    const pulsex = pickPulsexPair(localPairs, atBlock)
+    const pair = pulsex?.pairAddress ?? target.pairAddress
+    if (!pair) {
+      errors.push("No PulseX pair in the local directory for this contract")
+    } else try {
+      const candles = await fetchPulsexCandles({
+        token: target.contractAddress,
+        pair,
+        postedAt,
+        fromMs,
+        toMs,
+      })
+      if (candles.length) return { candles, source: "pulsex" }
+    } catch (error) {
+      if (isUnverifiable(error)) pulseUnverifiable = true
+      errors.push(error instanceof Error ? error.message : String(error))
+    }
+  }
   if (target.binanceSymbol) {
     try {
       return { candles: await binanceKlines(target.binanceSymbol, fromMs, toMs), source: "binance" }
@@ -83,30 +108,7 @@ export async function fetchHistory(
   } else if (network && target.pairAddress && olderThanGt) {
     errors.push("GeckoTerminal free OHLCV does not cover this date")
   }
-  if (target.chain === "pulsechain" && target.contractAddress) {
-    const localPairs = await pulsePairsFor(target.contractAddress)
-    const atBlock = estimatePulseBlock(Math.floor(postedAt / 1000))
-    const pulsex = pickPulsexPair(localPairs, atBlock)
-    const pair = pulsex?.pairAddress ?? target.pairAddress
-    if (!pair) {
-      errors.push("No PulseX pair in the local directory for this contract")
-    } else try {
-      const candles = await fetchPulsexCandles({
-        token: target.contractAddress,
-        pair,
-        postedAt,
-        fromMs,
-        toMs,
-      })
-      if (candles.length) return { candles, source: "pulsex" }
-    } catch (error) {
-      if (isUnverifiable(error)) {
-        throw new UnverifiablePriceError(error instanceof Error ? error.message : String(error))
-      }
-      errors.push(error instanceof Error ? error.message : String(error))
-    }
-  }
-  if (olderThanGt || olderThanCg) {
+  if (pulseUnverifiable || olderThanGt || olderThanCg) {
     throw new UnverifiablePriceError(
       errors.join(" | ") || "No free history covers this date, and on-chain reserves were not available. Not estimated.",
     )

@@ -65,23 +65,8 @@ export async function fetchJson<T>(
   throw lastError ?? new Error(`failed ${url}`)
 }
 
+/** Keyless public CoinGecko only. No paid or keyed tiers (Kyle's rule: no paid services). */
 export function coingeckoConfig() {
-  const key = process.env.COINGECKO_API_KEY
-  const tier = (process.env.COINGECKO_API_TIER ?? "").toLowerCase()
-  if (key && tier === "pro") {
-    return {
-      base: "https://pro-api.coingecko.com/api/v3",
-      headers: { "x-cg-pro-api-key": key },
-      minIntervalMs: 400,
-    }
-  }
-  if (key) {
-    return {
-      base: "https://api.coingecko.com/api/v3",
-      headers: { "x-cg-demo-api-key": key },
-      minIntervalMs: 1200,
-    }
-  }
   return {
     base: "https://api.coingecko.com/api/v3",
     headers: {} as Record<string, string>,

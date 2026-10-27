@@ -2,7 +2,7 @@
 
 Archive every post from the X accounts you track, detect crypto mentions, and score what the price did before and after the post.
 
-Demo voices in the UI are fictional. Their charts are labeled **SEED** and are not overwritten by the price job. Real posts that arrive through the ingest API are priced from Binance, CoinGecko, and GeckoTerminal.
+Demo voices in the UI are fictional. Their charts are labeled **SEED** and are not overwritten by the price job. Real posts that arrive through the ingest API are priced from free, keyless sources: Binance public market data, public CoinGecko, GeckoTerminal, and DexScreener. PulseChain tokens are priced from on-chain PulseX reserves via rpc.pulsechain.com. Anything without a verified price is marked unverifiable and never estimated.
 
 ## Run locally
 
@@ -55,8 +55,6 @@ The script only runs `SELECT` against `SOURCE_DATABASE_URL` and upserts into `DA
 | `DATABASE_URL_UNPOOLED` | no | Direct Neon URL (no `-pooler`). `vercel-build` migrates with this when it is set, and otherwise uses `DATABASE_URL`. |
 | `INGEST_SECRET` | yes | Bearer token for the ingest and influencer APIs. |
 | `CRON_SECRET` | yes | Bearer token for `/api/cron/prices` and `/api/cron/scores`. On Vercel, defining this makes Cron send `Authorization: Bearer $CRON_SECRET`. |
-| `COINGECKO_API_KEY` | no | Demo or pro key. Public CoinGecko works without one and is rate limited harder. |
-| `COINGECKO_API_TIER` | no | `demo` (default when a key is set) or `pro`. |
 | `SEED_DEMO` | no | Set to `true` only when you want `pnpm db:seed` to load fictional voices. Production must leave it unset. |
 
 Do not commit `.env.local`.
@@ -239,7 +237,7 @@ The in-app method page (`/methodology`) is the formula, and it renders the same 
 
 ## Limits
 
-- **CoinGecko public API** is roughly 5–15 calls per minute. The app waits about 1.6s between calls, retries 429s, and caches search and market-cap lookups. A demo key (`COINGECKO_API_KEY`) raises that. Very old ranges may come back as daily candles; the 36 hour gap rule still accepts them, so the “price at post” is the nearest daily close, not a trade print.
+- **CoinGecko public API** is roughly 5–15 calls per minute. The app waits about 1.6s between calls, retries 429s, and caches search and market-cap lookups. Very old ranges may come back as daily candles; the 36 hour gap rule still accepts them, so the “price at post” is the nearest daily close, not a trade print.
 - **Binance** hourly klines cover listed USDT pairs for years. Requests go to `data-api.binance.vision` first, then `api.binance.com`. The latter returns HTTP 451 from some regions; either failure falls through to CoinGecko. The app does not guess a USDT pair for low-confidence tickers.
 - **DexScreener** is used to pick the most liquid pair (about 300 requests/minute on their public API). It does not provide the historical path.
 - **GeckoTerminal** hourly pool OHLCV is about 30 requests/minute here (the client waits 1.3s). History starts when the pool exists. A brand new mint has no pre-call window, so the pump score stays blank. Each request returns up to 1000 hourly candles (~41 days). The price cron stores those by UTC day and continues the next gap on the next call, so a years-long book is not fetched in one Hobby invocation.
@@ -252,7 +250,7 @@ The in-app method page (`/methodology`) is the formula, and it renders the same 
 
 ## Deploy
 
-Deploy the Next.js app on Vercel with the env vars above. The public URL is the free `*.vercel.app` host. Set `DATABASE_URL` to the Neon **pooled** URL and `DATABASE_URL_UNPOOLED` to the direct URL. The `vercel-build` script migrates with the unpooled URL (or `DATABASE_URL` if that is all you have) and then runs `next build`. It never seeds. Leave `SEED_DEMO` unset in production. The app prices from public Binance, CoinGecko, DexScreener, GeckoTerminal, and PulseChain RPC endpoints. `COINGECKO_API_KEY` is optional. Cron in `vercel.json` is daily, and GitHub Actions drains the queue between those runs.
+Deploy the Next.js app on Vercel with the env vars above. The public URL is the free `*.vercel.app` host. Set `DATABASE_URL` to the Neon **pooled** URL and `DATABASE_URL_UNPOOLED` to the direct URL. The `vercel-build` script migrates with the unpooled URL (or `DATABASE_URL` if that is all you have) and then runs `next build`. It never seeds. Leave `SEED_DEMO` unset in production. The app prices from public Binance, CoinGecko, DexScreener, GeckoTerminal, and PulseChain RPC endpoints. Cron in `vercel.json` is daily, and GitHub Actions drains the queue between those runs.
 
 ## GitHub Actions minutes
 
