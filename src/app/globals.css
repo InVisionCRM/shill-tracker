@@ -181,6 +181,39 @@
   animation: beam 7s linear infinite;
 }
 
+.glow-gain {
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--gain) 55%, transparent),
+    0 0 22px color-mix(in oklch, var(--gain) 28%, transparent);
+}
+
+.glow-loss {
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--loss) 50%, transparent),
+    0 0 22px color-mix(in oklch, var(--loss) 22%, transparent);
+}
+
+.row-glow-gain { box-shadow: inset 3px 0 0 var(--gain); }
+.row-glow-loss { box-shadow: inset 3px 0 0 var(--loss); }
+
+.rank-tick {
+  animation: rank-tick 280ms ease-out;
+}
+
+@keyframes rank-tick {
+  from { transform: translateY(6px); opacity: 0.45; }
+  to { transform: none; opacity: 1; }
+}
+
+.timeline-item {
+  animation: timeline-in 420ms ease-out both;
+}
+
+@keyframes timeline-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
 @keyframes beam {
   to { stroke-dashoffset: -172; }
 }

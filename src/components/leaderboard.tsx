@@ -1,7 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
+import { useReducedMotion } from "motion/react"
 import { formatCompact, formatRoi, formatUsd, roiClass, dumpTone, scoreTone } from "@/lib/format"
 import type { LeaderRow, ScoreSnapshot } from "@/lib/types"
 import { Input } from "@/components/ui/input"
@@ -43,6 +44,9 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
   const [sort, setSort] = useState<SortKey>("credibility")
   const [minShills, setMinShills] = useState("1")
   const [mode, setMode] = useState<"first" | "all">("first")
+  const reduce = useReducedMotion()
+  const previousRanks = useRef<Map<string, number>>(new Map())
+  const [deltas, setDeltas] = useState<Map<string, number>>(new Map())
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const min = Number(minShills) || 0
@@ -53,6 +57,18 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
       .slice()
       .sort((a, b) => compare(a, b, sort))
   }, [rows, query, sort, minShills, mode])
+
+  useEffect(() => {
+    const next = new Map<string, number>()
+    const delta = new Map<string, number>()
+    filtered.forEach((row, index) => {
+      const before = previousRanks.current.get(row.id)
+      if (before != null && before !== index) delta.set(row.id, before - index)
+      next.set(row.id, index)
+    })
+    previousRanks.current = next
+    setDeltas(delta)
+  }, [filtered])
 
   return (
     <div className="flex flex-col gap-4">
@@ -108,7 +124,7 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
           <Link
             key={row.id}
             href={`/influencers/${row.username}`}
-            className="glass-card w-[86%] shrink-0 snap-center rounded-2xl p-4"
+            className={`glass-card w-[86%] shrink-0 snap-center rounded-2xl p-4 ${glowClass(row.medianRoi7d)}`}
           >
             <div className="flex items-center gap-3">
               <VoiceAvatar src={row.profileImageUrl} username={row.username} className="size-12" />
@@ -118,7 +134,7 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
                   @{row.username} · {formatCompact(row.followersCount)}
                 </span>
               </span>
-              <span className="ml-auto font-mono text-xs text-muted-foreground">#{index + 1}</span>
+              <RankMark index={index} delta={deltas.get(row.id) ?? 0} reduce={reduce} className="ml-auto" />
             </div>
             <Sparkline values={row.sparkline ?? []} className="mt-3" />
             <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
@@ -160,6 +176,7 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
               <TableHead className="hidden text-right md:table-cell">Unique</TableHead>
               <TableHead className="text-right">Win 7d</TableHead>
               <TableHead className="text-right">Median 7d</TableHead>
+              <TableHead className="hidden lg:table-cell">7d path</TableHead>
               <TableHead className="hidden text-right lg:table-cell">$100 / 7d</TableHead>
               <TableHead className="text-right">Dump risk</TableHead>
               <TableHead className="text-right">Credibility</TableHead>
@@ -167,8 +184,10 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
           </TableHeader>
           <TableBody>
             {filtered.map((row, index) => (
-              <TableRow key={row.id}>
-                <TableCell className="font-mono text-muted-foreground">{index + 1}</TableCell>
+              <TableRow key={row.id} className={rowGlowClass(row.medianRoi7d)}>
+                <TableCell className="font-mono text-muted-foreground">
+                  <RankMark index={index} delta={deltas.get(row.id) ?? 0} reduce={reduce} />
+                </TableCell>
                 <TableCell>
                   <Link href={`/influencers/${row.username}`} className="flex items-center gap-3">
                     <VoiceAvatar src={row.profileImageUrl} username={row.username} />
@@ -186,6 +205,9 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
                 <TableCell className={`text-right font-mono tabular-nums ${roiClass(row.medianRoi7d)}`}>
                   {formatRoi(row.medianRoi7d)}
                 </TableCell>
+                <TableCell className="hidden w-36 lg:table-cell">
+                  <Sparkline values={row.sparkline ?? []} />
+                </TableCell>
                 <TableCell className="hidden text-right font-mono tabular-nums lg:table-cell">
                   {row.portfolio7d == null ? "—" : formatUsd(row.portfolio7d)}
                 </TableCell>
@@ -199,7 +221,7 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
             ))}
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={11} className="py-8 text-center text-muted-foreground">
                   No voices match that filter.
                 </TableCell>
               </TableRow>
@@ -209,6 +231,37 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
       </div>
     </div>
   )
+}
+
+function RankMark({
+  index,
+  delta,
+  reduce,
+  className,
+}: {
+  index: number
+  delta: number
+  reduce: boolean | null
+  className?: string
+}) {
+  return (
+    <span className={`inline-flex items-baseline gap-1 font-mono text-xs text-muted-foreground tabular-nums ${className ?? ""}`}>
+      <span className={delta !== 0 && !reduce ? "rank-tick inline-block" : "inline-block"}>#{index + 1}</span>
+      {delta !== 0 ? (
+        <span className={delta > 0 ? "text-gain" : "text-loss"}>{delta > 0 ? `up ${delta}` : `down ${Math.abs(delta)}`}</span>
+      ) : null}
+    </span>
+  )
+}
+
+function glowClass(roi: number | null | undefined) {
+  if (roi == null) return ""
+  return roi >= 0 ? "glow-gain" : "glow-loss"
+}
+
+function rowGlowClass(roi: number | null | undefined) {
+  if (roi == null) return ""
+  return roi >= 0 ? "row-glow-gain" : "row-glow-loss"
 }
 
 function leaderView(row: LeaderRow, mode: "first" | "all"): LeaderRow {
