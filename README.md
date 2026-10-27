@@ -157,6 +157,39 @@ Canonical tickers (`$BTC`, `$ETH`, bitcoin, ethereum, …) resolve immediately. 
 
 PulseChain-focused accounts (preset: `@iambroots`, or any voice stored with `chain_bias = pulsechain`) resolve `$HEX`, `$PLS`, `$PLSX`, `$INC`, and `$PDAI` to PulseChain pools. Plain words `hex`, `pulsechain`, `pulsex`, `plsx`, `incentive`, and `pdai` count for that voice only. HEX also exists on Ethereum and shares the contract `0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39`; other accounts are priced from the Ethereum CoinGecko listing and the chain is shown in the UI. Pulse assets are not given a CoinGecko id, so they are not priced as the Ethereum token. PLS is the WPLS pool, not the thin “PulseChain” token. PDAI is Good DAI, not Ethereum DAI.
 
+## Adding an influencer
+
+Another bot can register a voice and backfill every stored post with one command. The file uses the same `{ user, posts }` shape as `POST /api/ingest/posts`. `INGEST_SECRET` comes from the environment (`.env.local` is loaded for local runs).
+
+```bash
+npm run import -- --file data/iambroots.json --url https://shill.example.com --defer-pricing
+```
+
+`pnpm run import --` runs the same script. Bare `pnpm import` is pnpm's lockfile importer and does not call this command.
+
+What it does:
+
+1. `POST /api/influencers` with `username`, `name`, and `x_user_id` from `user`. An existing handle is marked tracked again and the import continues.
+2. `POST /api/ingest/posts` in batches of 100. `--defer-pricing` adds `?defer_pricing=1` so a large file does not price inside the request.
+3. Retries each request up to 5 times on a network error, HTTP 429, or HTTP 5xx. Other 4xx responses stop the run.
+4. Writes `data/iambroots.json.progress.json` after the voice is registered and after each successful batch. Run the same command again to continue from the next unsent post. The checkpoint is removed when the file finishes. `--reset` discards it. A checkpoint for a different file or URL is refused.
+
+The last line of output is JSON:
+
+```json
+{
+  "ok": true,
+  "posts_upserted": 17800,
+  "posts_unchanged": 0,
+  "mentions_created": 26084,
+  "batches": 178,
+  "posts_total": 17800,
+  "resumed_from": 0
+}
+```
+
+`posts_upserted` counts posts whose text was new or changed. `posts_unchanged` counts ids that were already stored with the same text. `mentions_created` counts new ticker rows. Re-running a finished file is safe: ingest is idempotent, and the second pass reports those posts as unchanged.
+
 ## Cron
 
 ```

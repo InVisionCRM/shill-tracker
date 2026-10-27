@@ -13,7 +13,8 @@
     "db:seed": "tsx scripts/seed.ts",
     "test": "vitest run",
     "verify:prices": "tsx scripts/verify-prices.ts",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "import": "tsx scripts/import-influencer.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
