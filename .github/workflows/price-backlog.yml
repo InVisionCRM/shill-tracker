@@ -1,0 +1,43 @@
+name: Price backlog
+
+# Clears the pricing backlog with direct Postgres, outside Vercel's 60s limit.
+# Free: the job exits early when nothing is pending and is capped at 30 minutes.
+on:
+  workflow_dispatch:
+    inputs:
+      max_minutes:
+        description: "Minutes of pricing work (max 25)"
+        default: "25"
+  schedule:
+    # One catch-up run a day at 07:15 UTC.
+    - cron: "15 7 * * *"
+
+concurrency:
+  group: price-backlog
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backlog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Price the backlog
+        run: |
+          set -eu
+          test -n "$DATABASE_URL"
+          minutes="${{ github.event.inputs.max_minutes || '25' }}"
+          case "$minutes" in ''|*[!0-9]*) minutes=25 ;; esac
+          [ "$minutes" -gt 25 ] && minutes=25
+          MAX_MINUTES="$minutes" pnpm prices:backlog

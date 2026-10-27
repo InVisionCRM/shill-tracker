@@ -10,9 +10,12 @@ async function handle(request: Request) {
   const url = new URL(request.url)
   const raw = url.searchParams.get("limit")
   const parsed = raw == null ? 800 : Number(raw)
+  const budgetRaw = Number(url.searchParams.get("budget_ms"))
+  // maxDuration is 60s: up to 48s of work plus about 9s to save the summary.
+  const budgetMs = Number.isFinite(budgetRaw) && budgetRaw > 0 ? Math.min(budgetRaw, 48_000) : 45_000
   const limit = Number.isFinite(parsed) ? parsed : 800
   try {
-    const result = await runPriceJob({ limit })
+    const result = await runPriceJob({ limit, budgetMs })
     return Response.json(result)
   } catch (error) {
     return Response.json(

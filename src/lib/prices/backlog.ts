@@ -32,6 +32,8 @@ export async function priceFromCache(options: {
   limit: number
   budgetMs: number
   startedAt: number
+  /** Receives the live stats object up front, so a caller that stops waiting still sees progress. */
+  onStats?: (stats: BacklogStats) => void
 }) {
   const db = getDb()
   const hourAgo = new Date(Date.now() - HOUR)
@@ -152,6 +154,7 @@ export async function priceFromCache(options: {
     errorsBySource: {},
     touched: new Set<string>(),
   }
+  options.onStats?.(stats)
   const overBudget = () => Date.now() - options.startedAt > options.budgetMs
 
   const write = async (row: Row, slice: Candle[], source: string) => {
@@ -286,8 +289,7 @@ export async function priceFromCache(options: {
 
   // 2) API assets (Binance, CoinGecko, GeckoTerminal): fetch each missing day range once per asset,
   // cache it by day, then evaluate every call on that asset from the cache.
-  for (const [assetKey, group] of apiGroups) {
-    if (overBudget()) break
+  const runApi = async ([assetKey, group]: [string, Row[]]) => {
     const sample = group[0]
     const needed = new Set<string>()
     for (const row of group) for (const day of windowDays(row.createdAt.getTime())) needed.add(day)
@@ -335,7 +337,7 @@ export async function priceFromCache(options: {
       }
     }
     const ready = group.filter((row) => windowDays(row.createdAt.getTime()).every((day) => have.has(day)))
-    if (!ready.length) continue
+    if (!ready.length) return
     const candles = await loadCandles(assetKey, [...have])
     if (!source) {
       const [stored] = await db
@@ -366,6 +368,13 @@ export async function priceFromCache(options: {
       }
     }
   }
+  // Different assets usually hit different hosts; fetchJson keeps per-host spacing and 429 cooldowns.
+  const apiQueue = [...apiGroups]
+  await Promise.all(
+    Array.from({ length: Math.min(API_CONCURRENCY, apiQueue.length) }, async () => {
+      while (apiQueue.length && !overBudget()) await runApi(apiQueue.shift()!)
+    }),
+  )
 
   return {
     ...stats,
@@ -373,7 +382,7 @@ export async function priceFromCache(options: {
   }
 }
 
-type BacklogStats = {
+export type BacklogStats = {
   attempted: number
   assets: number
   priced: number
@@ -387,6 +396,7 @@ type BacklogStats = {
 }
 
 const ONCHAIN_CONCURRENCY = 3
+const API_CONCURRENCY = 3
 /** Free CoinGecko history reaches back about 365 days; GeckoTerminal about 180. */
 const API_HISTORY_MS = 360 * DAY
 

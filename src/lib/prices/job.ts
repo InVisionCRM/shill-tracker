@@ -3,7 +3,7 @@ import { canonicalBySymbol } from "../detect/assets"
 import { PULSE_BOOK, dexUrl } from "../detect/pulse"
 import { getDb } from "../db"
 import { cronRuns, influencers, mentions, quotes } from "../db/schema"
-import { priceFromCache, sourceOf } from "./backlog"
+import { priceFromCache, sourceOf, type BacklogStats } from "./backlog"
 import { onchainCallCount } from "./onchain"
 import { callRankWindow } from "../scoring/call-rank"
 import { getPricingProgress } from "../queries"
@@ -20,7 +20,39 @@ const DAY = 24 * HOUR
 let quoteInflight: Promise<void> | null = null
 let quoteAttemptAt = 0
 
-export async function runPriceJob(options?: { limit?: number; mentionIds?: string[]; budgetMs?: number }) {
+/** Work stops at the budget; the summary, quotes and run record get what is left before the hard cap. */
+const DEFAULT_BUDGET_MS = 45_000
+const FINALIZE_MS = 9_000
+const RESOLVE_CONCURRENCY = 3
+
+class BudgetExceeded extends Error {
+  constructor() {
+    super("price job budget reached")
+    this.name = "BudgetExceeded"
+  }
+}
+
+/** Resolves with the work, or rejects at the deadline so no slow call can push past it. */
+function beforeDeadline<T>(work: Promise<T>, deadline: number): Promise<T> {
+  const remaining = deadline - Date.now()
+  if (remaining <= 0) {
+    work.catch(() => undefined)
+    return Promise.reject(new BudgetExceeded())
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new BudgetExceeded()), remaining)
+  })
+  work.catch(() => undefined)
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer))
+}
+
+export async function runPriceJob(options?: {
+  limit?: number
+  mentionIds?: string[]
+  budgetMs?: number
+  skipQuotes?: boolean
+}) {
   const started = new Date()
   const db = getDb()
   const inline = Boolean(options?.mentionIds?.length)
@@ -28,7 +60,9 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
   const limit = Math.min(Math.max(requested, 1), inline ? 20 : 800)
   const detail: Record<string, unknown> = { resolved: 0, priced: 0, failed: 0, quotes: 0, candleFetches: 0 }
   const touched = new Set<string>()
-  const budgetMs = options?.budgetMs ?? 42_000
+  const budgetMs = options?.budgetMs ?? DEFAULT_BUDGET_MS
+  const workDeadline = started.getTime() + budgetMs
+  const hardDeadline = workDeadline + FINALIZE_MS
   const dedupeIds: string[] = []
   const summary = {
     attempted: 0,
@@ -43,10 +77,19 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
     fetches: 0,
     rpcBatches: 0,
     durationMs: 0,
+    stoppedBy: "done" as "done" | "budget",
+    phases: {} as Record<string, number>,
+  }
+  const phase = (name: string, since: number) => {
+    summary.phases[name] = Date.now() - since
   }
   const rpcStart = onchainCallCount()
 
+  // priceFromCache reports into this live object, so a run cut off at the budget still counts its work.
+  let backlogStats: BacklogStats | null = null
   try {
+    const work = async () => {
+    let mark = Date.now()
     if (!inline) {
       const pulseResolved = await applyPulseBias()
       detail.resolved = pulseResolved
@@ -117,10 +160,12 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
       group.mentions.push(mention)
       groups.set(key, group)
     }
+    phase("select", mark)
+    mark = Date.now()
     const resolveBudgetMs = inline ? 20_000 : Math.round(budgetMs * 0.4)
     let resolvedGroups = 0
-    for (const group of groups.values()) {
-      if (Date.now() - started.getTime() > resolveBudgetMs) break
+    let coingeckoLimited = false
+    const resolveOne = async (group: (typeof groups extends Map<string, infer G> ? G : never)) => {
       const first = group.mentions[0]
       const ids = group.mentions.map((mention) => mention.id)
       try {
@@ -148,7 +193,7 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
             : first.symbol
               ? await resolveSymbol(first.symbol, group.hint)
               : null
-        if (!resolved) continue
+        if (!resolved) return
         const known = resolved.symbol ? canonicalBySymbol(resolved.symbol) : null
         const unresolvedEvm = resolved.chain === "unknown-evm" && resolved.resolutionStatus === "pending"
         await db
@@ -198,12 +243,27 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
             updatedAt: new Date(),
           })
           .where(inArray(mentions.id, ids))
-        if (/429|cooldown/i.test(message) && source === "coingecko") break
+        if (/429|cooldown/i.test(message) && source === "coingecko") coingeckoLimited = true
       }
     }
+    // A few groups at once; each host still keeps its own spacing and 429 cooldown in fetchJson.
+    const queue = [...groups.values()]
+    await Promise.all(
+      Array.from({ length: Math.min(RESOLVE_CONCURRENCY, queue.length) }, async () => {
+        while (queue.length) {
+          if (Date.now() - started.getTime() > resolveBudgetMs) return
+          const group = queue.shift()!
+          // Symbol lookups lean on CoinGecko; once it rate-limits, leave symbol groups for the next run.
+          if (coingeckoLimited && !group.curated && !group.mentions[0].contractAddress) continue
+          await resolveOne(group)
+        }
+      }),
+    )
     summary.resolveGroups = resolvedGroups
     summary.resolveGroupsPending = groups.size - resolvedGroups
     if (dedupeIds.length) await dedupePosts([...new Set(dedupeIds)])
+    phase("resolve", mark)
+    mark = Date.now()
 
     if (inline) {
     const history = await db
@@ -317,11 +377,27 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
       }
     }
     } else {
-      const backlog = await priceFromCache({
+      await priceFromCache({
         limit,
         budgetMs,
         startedAt: started.getTime(),
+        onStats: (stats) => {
+          backlogStats = stats
+        },
       })
+    }
+    phase("price", mark)
+    }
+
+    try {
+      await beforeDeadline(work(), workDeadline)
+    } catch (error) {
+      if (!(error instanceof BudgetExceeded)) throw error
+      // Abandoned work still checks the budget and winds down; every row write is independent.
+      summary.stoppedBy = "budget"
+    }
+    const backlog = backlogStats as BacklogStats | null
+    if (backlog) {
       detail.priced = Number(detail.priced) + backlog.priced
       detail.failed = Number(detail.failed) + backlog.failed
       detail.candleFetches = backlog.fetches
@@ -338,10 +414,24 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
       for (const id of backlog.touched) touched.add(id)
     }
 
-    detail.quotes = await refreshQuotes()
-    if (touched.size) await recomputeInfluencers([...touched])
-    const progress = await getPricingProgress()
-    detail.progress = progress
+    const finalize = async () => {
+      let mark = Date.now()
+      if (!options?.skipQuotes && hardDeadline - Date.now() > 6_000) {
+        detail.quotes = await beforeDeadline(refreshQuotes(), hardDeadline - 4_000).catch(() => 0)
+        phase("quotes", mark)
+      }
+      mark = Date.now()
+      if (touched.size) {
+        await beforeDeadline(recomputeInfluencers([...touched]), hardDeadline - 2_000).catch(() => {
+          detail.statsDeferred = true
+        })
+        phase("stats", mark)
+      }
+      mark = Date.now()
+      detail.progress = await beforeDeadline(getPricingProgress(), hardDeadline - 500).catch(() => null)
+      phase("progress", mark)
+    }
+    await finalize()
     summary.rpcBatches = onchainCallCount() - rpcStart
     summary.durationMs = Date.now() - started.getTime()
     detail.summary = summary

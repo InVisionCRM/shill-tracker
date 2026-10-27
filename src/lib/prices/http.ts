@@ -18,9 +18,11 @@ export async function fetchJson<T>(
   const resting = cooldownUntil.get(host) ?? 0
   if (resting > Date.now()) throw new Error(`429 cooldown ${host}`)
   const minInterval = init?.minIntervalMs ?? 0
-  const wait = (lastCall.get(host) ?? 0) + minInterval - Date.now()
-  if (wait > 0) await sleep(wait)
-  lastCall.set(host, Date.now())
+  // Reserve the next slot before sleeping, so concurrent callers queue instead of firing together.
+  const now = Date.now()
+  const slot = Math.max(now, (lastCall.get(host) ?? 0) + minInterval)
+  lastCall.set(host, slot)
+  if (slot > now) await sleep(slot - now)
 
   let lastError: Error | null = null
   for (let attempt = 0; attempt < 3; attempt += 1) {
