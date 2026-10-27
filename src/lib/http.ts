@@ -4,6 +4,19 @@ export function textHash(text: string) {
   return createHash("sha256").update(text).digest("hex")
 }
 
+/** Read-only health checks accept HEALTH_TOKEN (optional) as well as CRON_SECRET. Nothing else does. */
+export function requireHealthBearer(request: Request) {
+  const token = process.env.HEALTH_TOKEN
+  if (token && bearerMatches(request, token)) return null
+  return requireBearer(request, "CRON_SECRET")
+}
+
+function bearerMatches(request: Request, secret: string) {
+  const actual = Buffer.from(request.headers.get("authorization") ?? "")
+  const wanted = Buffer.from(`Bearer ${secret}`)
+  return actual.length === wanted.length && timingSafeEqual(actual, wanted)
+}
+
 export function requireBearer(request: Request, secretName: "INGEST_SECRET" | "CRON_SECRET") {
   const secret = process.env[secretName]
   if (!secret) {

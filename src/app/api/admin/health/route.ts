@@ -2,7 +2,7 @@ import { connection } from "next/server"
 import { desc, eq, sql } from "drizzle-orm"
 import { getDb } from "@/lib/db"
 import { cronRuns } from "@/lib/db/schema"
-import { requireBearer } from "@/lib/http"
+import { requireHealthBearer } from "@/lib/http"
 
 export const maxDuration = 20
 
@@ -27,7 +27,7 @@ function rowsOf<T>(result: unknown): T[] {
 /** Operational health. Bearer CRON_SECRET. Returns counts and sizes only, never connection details. */
 export async function GET(request: Request) {
   await connection()
-  const denied = requireBearer(request, "CRON_SECRET")
+  const denied = requireHealthBearer(request)
   if (denied) return denied
   const db = getDb()
   const [size] = rowsOf<{ bytes: string | number }>(
