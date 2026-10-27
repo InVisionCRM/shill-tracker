@@ -6,6 +6,8 @@ const MAX_BYTES = 1_000_000
 // Logos rarely change: a day in the browser, 30 days at the CDN, then serve stale while refreshing.
 const CACHE_OK = "public, max-age=86400, s-maxage=2592000, stale-while-revalidate=604800"
 const CACHE_MISS = "public, max-age=300, s-maxage=3600"
+// Upstream hiccups should not pin a broken logo at the CDN.
+const CACHE_UPSTREAM_FAIL = "public, max-age=60, s-maxage=60"
 
 export async function GET(request: Request) {
   const target = allowedImageUrl(new URL(request.url).searchParams.get("u"))
@@ -37,6 +39,6 @@ export async function GET(request: Request) {
       },
     })
   } catch {
-    return new Response("unavailable", { status: 404, headers: { "cache-control": CACHE_MISS } })
+    return new Response("unavailable", { status: 404, headers: { "cache-control": CACHE_UPSTREAM_FAIL } })
   }
 }

@@ -159,8 +159,8 @@ function PricingBar() {
       ? `Pricing repeats ${progress.priced.toLocaleString("en-US")} / ${progress.total.toLocaleString("en-US")}`
       : `Pricing first calls ${progress.firstPriced.toLocaleString("en-US")} / ${progress.firstTotal.toLocaleString("en-US")}`
   return (
-    // Overlays the top edge of the page instead of pushing it down when progress arrives (no layout shift).
-    <div className="pointer-events-none absolute inset-x-0 top-full border-y bg-background/95 px-4 py-1.5 backdrop-blur">
+    // Fixed just above the mobile tab bar (bottom on desktop): it never shifts the page or covers the top of it.
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 border-y bg-background/95 px-4 py-1.5 backdrop-blur md:bottom-0">
       <div className="mx-auto flex max-w-6xl items-center gap-3">
         <p className="shrink-0 font-mono text-[10px] tracking-wide text-muted-foreground uppercase">
           {label}

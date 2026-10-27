@@ -158,6 +158,12 @@ function estimate(list: Anchor[], ts: number) {
 }
 
 const blockCache = new Map<number, number>()
+/** Real chain timestamp (seconds) of the block chosen for each target time. Candles use this, never the target. */
+const blockTimeCache = new Map<number, number>()
+
+export function blockTimeFor(ts: number) {
+  return blockTimeCache.get(ts) ?? null
+}
 
 /** Block at or just before each unix timestamp, found with two batched correction rounds. */
 export async function blocksAt(timestamps: number[]) {
@@ -173,6 +179,7 @@ export async function blocksAt(timestamps: number[]) {
   for (const ts of todo) {
     if (head && ts >= head.ts) {
       result.set(ts, head.block)
+      blockTimeCache.set(ts, head.ts)
       continue
     }
     const guess = estimate(list, ts)
@@ -192,9 +199,11 @@ export async function blocksAt(timestamps: number[]) {
       const delta = ts - actual
       const spacing = guess < 15_537_394 ? 13 : guess < FORK_BLOCK ? 12 : 10
       if (Math.abs(delta) <= spacing * 2 || round === 2) {
-        const block = delta < 0 ? guess - Math.ceil(-delta / spacing) : guess
-        result.set(ts, Math.max(1, block))
-        blockCache.set(ts, Math.max(1, block))
+        // Use the block we actually fetched, with its real timestamp. When the last round is still far
+        // off, the gap shows up in the candle time and the evaluator labels it nearest_candle, not exact.
+        result.set(ts, guess)
+        blockCache.set(ts, guess)
+        blockTimeCache.set(ts, actual)
       } else {
         guesses.set(ts, Math.max(1, guess + Math.round(delta / spacing)))
         again.push(ts)
@@ -382,7 +391,9 @@ export async function onchainSeries(input: {
     if (quoteUsd == null) return
     const price = inQuote * quoteUsd
     if (!Number.isFinite(price) || price <= 0) return
-    candles.push({ t: row.ts * 1000, p: price, v: 0 })
+    const real = blockTimeFor(row.ts)
+    if (real == null) return
+    candles.push({ t: real * 1000, p: price, v: 0 })
   })
   return candles.sort((a, b) => a.t - b.t)
 }

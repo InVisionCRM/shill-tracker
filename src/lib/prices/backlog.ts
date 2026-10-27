@@ -375,7 +375,8 @@ export async function priceFromCache(options: {
           .set({
             priceError: slice.length < 2 ? `cached window has ${slice.length} candles` : "no candle within 36h of the post",
             priceAttempts: attempts,
-            priceStatus: attempts >= 3 ? (postedAt < Date.now() - API_HISTORY_MS ? "unverifiable" : "unavailable") : row.priceStatus,
+            // A cache gap is not proof that no data exists, so this never marks unverifiable.
+            priceStatus: attempts >= 3 ? "unavailable" : row.priceStatus,
             updatedAt: new Date(),
           })
           .where(eq(mentions.id, row.id))

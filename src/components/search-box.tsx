@@ -9,8 +9,17 @@ export function SearchBox() {
   const router = useRouter()
   const pathname = usePathname()
   const [value, setValue] = useState(initial)
+  const [seen, setSeen] = useState(initial)
   const [pending, start] = useTransition()
   const last = useRef(initial)
+  // Back/forward or a link can change ?q= without remounting; follow the URL instead of keeping a stale query.
+  if (initial !== seen) {
+    setSeen(initial)
+    if (initial !== last.current) setValue(initial)
+  }
+  useEffect(() => {
+    last.current = seen
+  }, [seen])
 
   useEffect(() => {
     const query = value.trim()
