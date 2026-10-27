@@ -1,0 +1,1221 @@
+{
+  "id": "b79e92e1-6bab-452d-9eee-feea2d1763dd",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.api_cache": {
+      "name": "api_cache",
+      "schema": "",
+      "columns": {
+        "cache_key": {
+          "name": "cache_key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fetched_at": {
+          "name": "fetched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.cron_runs": {
+      "name": "cron_runs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "job": {
+          "name": "job",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ok": {
+          "name": "ok",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "detail": {
+          "name": "detail",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.influencer_stats": {
+      "name": "influencer_stats",
+      "schema": "",
+      "columns": {
+        "influencer_id": {
+          "name": "influencer_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "shill_count": {
+          "name": "shill_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "post_count": {
+          "name": "post_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "unique_tickers": {
+          "name": "unique_tickers",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "priced_count": {
+          "name": "priced_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "win_rate_1h": {
+          "name": "win_rate_1h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "win_rate_24h": {
+          "name": "win_rate_24h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "win_rate_7d": {
+          "name": "win_rate_7d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "win_rate_30d": {
+          "name": "win_rate_30d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "win_rate_now": {
+          "name": "win_rate_now",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_roi_1h": {
+          "name": "avg_roi_1h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_roi_24h": {
+          "name": "avg_roi_24h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_roi_7d": {
+          "name": "avg_roi_7d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_roi_30d": {
+          "name": "avg_roi_30d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_roi_now": {
+          "name": "avg_roi_now",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "median_roi_1h": {
+          "name": "median_roi_1h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "median_roi_24h": {
+          "name": "median_roi_24h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "median_roi_7d": {
+          "name": "median_roi_7d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "median_roi_30d": {
+          "name": "median_roi_30d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "median_roi_now": {
+          "name": "median_roi_now",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "portfolio_1h": {
+          "name": "portfolio_1h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "portfolio_24h": {
+          "name": "portfolio_24h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "portfolio_7d": {
+          "name": "portfolio_7d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "portfolio_30d": {
+          "name": "portfolio_30d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "portfolio_now": {
+          "name": "portfolio_now",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "portfolio_n_1h": {
+          "name": "portfolio_n_1h",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "portfolio_n_24h": {
+          "name": "portfolio_n_24h",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "portfolio_n_7d": {
+          "name": "portfolio_n_7d",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "portfolio_n_30d": {
+          "name": "portfolio_n_30d",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "portfolio_n_now": {
+          "name": "portfolio_n_now",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "best_mention_id": {
+          "name": "best_mention_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "worst_mention_id": {
+          "name": "worst_mention_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "repeat_assets": {
+          "name": "repeat_assets",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "pump_dump_count": {
+          "name": "pump_dump_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "pump_dump_rate": {
+          "name": "pump_dump_rate",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_pump_score": {
+          "name": "avg_pump_score",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dump_risk_score": {
+          "name": "dump_risk_score",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "credibility_score": {
+          "name": "credibility_score",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "credibility_horizon": {
+          "name": "credibility_horizon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sample_size": {
+          "name": "sample_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "computed_at": {
+          "name": "computed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "influencer_stats_influencer_id_influencers_id_fk": {
+          "name": "influencer_stats_influencer_id_influencers_id_fk",
+          "tableFrom": "influencer_stats",
+          "tableTo": "influencers",
+          "columnsFrom": [
+            "influencer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "influencer_stats_best_mention_id_mentions_id_fk": {
+          "name": "influencer_stats_best_mention_id_mentions_id_fk",
+          "tableFrom": "influencer_stats",
+          "tableTo": "mentions",
+          "columnsFrom": [
+            "best_mention_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "influencer_stats_worst_mention_id_mentions_id_fk": {
+          "name": "influencer_stats_worst_mention_id_mentions_id_fk",
+          "tableFrom": "influencer_stats",
+          "tableTo": "mentions",
+          "columnsFrom": [
+            "worst_mention_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.influencers": {
+      "name": "influencers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "x_user_id": {
+          "name": "x_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "username": {
+          "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "profile_image_url": {
+          "name": "profile_image_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "followers_count": {
+          "name": "followers_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "following_count": {
+          "name": "following_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "tweet_count": {
+          "name": "tweet_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "listed_count": {
+          "name": "listed_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "tracked": {
+          "name": "tracked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "is_demo": {
+          "name": "is_demo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "latest_post_id": {
+          "name": "latest_post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "influencers_tracked_idx": {
+          "name": "influencers_tracked_idx",
+          "columns": [
+            {
+              "expression": "tracked",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "influencers_x_user_id_unique": {
+          "name": "influencers_x_user_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "x_user_id"
+          ]
+        },
+        "influencers_username_unique": {
+          "name": "influencers_username_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "username"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.mentions": {
+      "name": "mentions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "influencer_id": {
+          "name": "influencer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "match_key": {
+          "name": "match_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw_text": {
+          "name": "raw_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "match_type": {
+          "name": "match_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "symbol": {
+          "name": "symbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "asset_name": {
+          "name": "asset_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "asset_key": {
+          "name": "asset_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "coingecko_id": {
+          "name": "coingecko_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain": {
+          "name": "chain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contract_address": {
+          "name": "contract_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pair_address": {
+          "name": "pair_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dexscreener_url": {
+          "name": "dexscreener_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "binance_symbol": {
+          "name": "binance_symbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "geckoterminal_network": {
+          "name": "geckoterminal_network",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'low'"
+        },
+        "confidence_reason": {
+          "name": "confidence_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_status": {
+          "name": "resolution_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "price_source": {
+          "name": "price_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_at": {
+          "name": "price_at",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_1h": {
+          "name": "price_1h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_24h": {
+          "name": "price_24h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_7d": {
+          "name": "price_7d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_30d": {
+          "name": "price_30d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_now": {
+          "name": "price_now",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_24h_before": {
+          "name": "price_24h_before",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_7d_before": {
+          "name": "price_7d_before",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "roi_1h": {
+          "name": "roi_1h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "roi_24h": {
+          "name": "roi_24h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "roi_7d": {
+          "name": "roi_7d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "roi_30d": {
+          "name": "roi_30d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "roi_now": {
+          "name": "roi_now",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_gain": {
+          "name": "max_gain",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_drawdown": {
+          "name": "max_drawdown",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_price_after": {
+          "name": "max_price_after",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "min_price_after": {
+          "name": "min_price_after",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "volume_before_24h": {
+          "name": "volume_before_24h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "volume_after_24h": {
+          "name": "volume_after_24h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "runup_24h": {
+          "name": "runup_24h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "runup_7d": {
+          "name": "runup_7d",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pump_dump_score": {
+          "name": "pump_dump_score",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pump_dump_flag": {
+          "name": "pump_dump_flag",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "pump_dump_reasons": {
+          "name": "pump_dump_reasons",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "series": {
+          "name": "series",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_status": {
+          "name": "price_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "price_error": {
+          "name": "price_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_attempts": {
+          "name": "price_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "pinned": {
+          "name": "pinned",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "is_demo": {
+          "name": "is_demo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "priced_at": {
+          "name": "priced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "mentions_post_match_idx": {
+          "name": "mentions_post_match_idx",
+          "columns": [
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "match_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mentions_influencer_idx": {
+          "name": "mentions_influencer_idx",
+          "columns": [
+            {
+              "expression": "influencer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mentions_symbol_idx": {
+          "name": "mentions_symbol_idx",
+          "columns": [
+            {
+              "expression": "symbol",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mentions_asset_key_idx": {
+          "name": "mentions_asset_key_idx",
+          "columns": [
+            {
+              "expression": "asset_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mentions_price_status_idx": {
+          "name": "mentions_price_status_idx",
+          "columns": [
+            {
+              "expression": "price_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mentions_created_idx": {
+          "name": "mentions_created_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mentions_post_id_posts_id_fk": {
+          "name": "mentions_post_id_posts_id_fk",
+          "tableFrom": "mentions",
+          "tableTo": "posts",
+          "columnsFrom": [
+            "post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "mentions_influencer_id_influencers_id_fk": {
+          "name": "mentions_influencer_id_influencers_id_fk",
+          "tableFrom": "mentions",
+          "tableTo": "influencers",
+          "columnsFrom": [
+            "influencer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.posts": {
+      "name": "posts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "influencer_id": {
+          "name": "influencer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "text": {
+          "name": "text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "text_hash": {
+          "name": "text_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "like_count": {
+          "name": "like_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "retweet_count": {
+          "name": "retweet_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "reply_count": {
+          "name": "reply_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "quote_count": {
+          "name": "quote_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "bookmark_count": {
+          "name": "bookmark_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "impression_count": {
+          "name": "impression_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_demo": {
+          "name": "is_demo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "ingested_at": {
+          "name": "ingested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "posts_influencer_created_idx": {
+          "name": "posts_influencer_created_idx",
+          "columns": [
+            {
+              "expression": "influencer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "posts_influencer_id_influencers_id_fk": {
+          "name": "posts_influencer_id_influencers_id_fk",
+          "tableFrom": "posts",
+          "tableTo": "influencers",
+          "columnsFrom": [
+            "influencer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.quotes": {
+      "name": "quotes",
+      "schema": "",
+      "columns": {
+        "asset_key": {
+          "name": "asset_key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "symbol": {
+          "name": "symbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price": {
+          "name": "price",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "change_24h": {
+          "name": "change_24h",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
