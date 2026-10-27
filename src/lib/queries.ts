@@ -194,6 +194,7 @@ export async function getInfluencer(username: string) {
   if (!rows[0]) return null
   const influencer = rows[0].influencers
   const stats = rows[0].influencer_stats
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { series: _series, ...mentionCols } = getTableColumns(mentions)
   const [mentionCount] = await db
     .select({ n: sql<number>`count(*)::int` })

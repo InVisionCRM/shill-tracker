@@ -6,6 +6,7 @@ import type { ScoreSnapshot } from "./types"
 
 export async function recomputeInfluencers(influencerIds?: string[]) {
   const db = getDb()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { series: _series, ...mentionCols } = getTableColumns(mentions)
   const mentionRows = influencerIds?.length
     ? await db.select(mentionCols).from(mentions).where(inArray(mentions.influencerId, influencerIds))

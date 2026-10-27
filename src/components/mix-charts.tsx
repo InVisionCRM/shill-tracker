@@ -8,12 +8,14 @@ export function TickerDonut({
 }) {
   const total = slices.reduce((sum, slice) => sum + slice.count, 0)
   if (!total) return <p className="text-sm text-muted-foreground">No tickers yet.</p>
-  let cursor = 0
   const colors = ["var(--phosphor)", "var(--chart-4)", "var(--warn)", "var(--loss)", "var(--chart-5)", "var(--gain)"]
+  const ends = slices.reduce<number[]>((acc, slice) => {
+    acc.push((acc.at(-1) ?? 0) + (slice.count / total) * 100)
+    return acc
+  }, [])
   const stops = slices.map((slice, index) => {
-    const start = cursor
-    cursor += (slice.count / total) * 100
-    return `${colors[index % colors.length]} ${start}% ${cursor}%`
+    const start = index === 0 ? 0 : ends[index - 1]
+    return `${colors[index % colors.length]} ${start}% ${ends[index]}%`
   })
   return (
     <div className="flex items-center gap-4">

@@ -1,9 +1,9 @@
 "use client"
 
-import { useActionState, useEffect, useState, useTransition } from "react"
+import { useActionState, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { stopTracking, trackVoice } from "@/lib/actions"
+import { stopTracking, trackVoice, type ActionState } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -29,14 +29,18 @@ import { Input } from "@/components/ui/input"
 export function TrackVoiceDialog() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [state, action, pending] = useActionState(trackVoice, null)
-  useEffect(() => {
-    if (state?.ok && state.username) {
-      toast.success(`Tracking @${state.username}`)
-      setOpen(false)
-      router.push(`/influencers/${state.username}`)
-    }
-  }, [state, router])
+  const [state, action, pending] = useActionState(
+    async (prev: ActionState, formData: FormData) => {
+      const result = await trackVoice(prev, formData)
+      if (result?.ok && result.username) {
+        toast.success(`Tracking @${result.username}`)
+        setOpen(false)
+        router.push(`/influencers/${result.username}`)
+      }
+      return result
+    },
+    null,
+  )
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button />}>Track a voice</DialogTrigger>

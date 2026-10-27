@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm"
 import { canonicalBySymbol } from "../src/lib/detect/assets"
-import { collapseMatches, extractMatches, identifyFast, type IdentifiedMatch } from "../src/lib/detect/extract"
+import { collapseMatches, extractMatches, identifyFast } from "../src/lib/detect/extract"
 import { getDb, getPool } from "../src/lib/db"
 import { influencers, mentions, posts, quotes } from "../src/lib/db/schema"
 import { loadLocalEnv } from "../src/lib/env"

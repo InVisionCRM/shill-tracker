@@ -77,9 +77,9 @@ export type InfluencerAggregate = {
   sampleSize: number
 }
 
-const HORIZON_KEYS = ["1h", "24h", "7d", "30d", "now"] as const
+type HorizonKey = "1h" | "24h" | "7d" | "30d" | "now"
 
-function roiFor(mention: StatMention, horizon: (typeof HORIZON_KEYS)[number]) {
+function roiFor(mention: StatMention, horizon: HorizonKey) {
   if (horizon === "1h") return mention.roi1h
   if (horizon === "24h") return mention.roi24h
   if (horizon === "7d") return mention.roi7d
@@ -193,7 +193,7 @@ function chooseCredibilityHorizon(
   return null
 }
 
-function nums(mentions: StatMention[], horizon: (typeof HORIZON_KEYS)[number]) {
+function nums(mentions: StatMention[], horizon: HorizonKey) {
   return mentions
     .map((mention) => roiFor(mention, horizon))
     .filter((value): value is number => value != null && Number.isFinite(value))
