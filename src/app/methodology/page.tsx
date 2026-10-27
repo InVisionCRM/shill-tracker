@@ -34,8 +34,11 @@ export default function MethodologyPage() {
           Canonical large caps resolve immediately to a CoinGecko id and, where one exists, a Binance USDT pair.
           Everything else waits for CoinGecko search plus market cap, then DexScreener liquidity. The biggest market
           cap wins. Confidence is high when the leader is at least 5× the runner-up and above $5M, medium when the
-          lead is at least 2× and above $1M, and low when the field is crowded. Contracts take the DexScreener pair
-          with the most liquidity. A thin book stays low confidence and is badged in the UI. A PulseChain-focused
+          lead is at least 2× and above $1M, and low when the field is crowded. An 0x contract is not assumed to
+          be Ethereum. Pair lookup checks PulseChain first, then Ethereum, Base, BSC, and other EVM chains, on
+          DexScreener and then GeckoTerminal. A PulseChain pool wins when it has real liquidity; a dust pool does
+          not hide a deeper market on Ethereum, Base, or BSC. Until a pair exists the chain is stored as unknown-evm
+          and can be resolved on a later pass. A thin book stays low confidence and is badged in the UI. A PulseChain-focused
           voice resolves HEX, PLS, PLSX, INC, and PDAI to PulseChain pools instead of the same symbol on another
           chain. HEX on every other voice is the Ethereum listing. The chain is shown next to the ticker.
         </p>

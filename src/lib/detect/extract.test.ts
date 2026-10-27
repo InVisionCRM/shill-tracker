@@ -42,6 +42,15 @@ describe("extractMatches", () => {
     expect(identified.geckoterminalNetwork).toBe("pulsechain")
   })
 
+  it("does not assume an 0x contract is ethereum", () => {
+    const plsx = "0x95b303987a60c71504d99aa1b13b4da07b0790ab"
+    const [match] = extractMatches(`the pool is ${plsx}`)
+    const identified = identifyFast(match)
+    expect(identified.matchType).toBe("evm")
+    expect(identified.chain).toBe("unknown-evm")
+    expect(identified.resolutionStatus).toBe("pending")
+  })
+
   it("does not treat a slice of an EVM address as a Solana mint", () => {
     const mixed = "0x6982508145454Ce325dDbE47a25d4ec3d2311933"
     const matches = extractMatches(`adding the pepe contract ${mixed}`)

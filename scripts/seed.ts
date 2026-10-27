@@ -431,7 +431,7 @@ const tape: {
     reposts: 60,
     replies: 140,
     views: 99000,
-    book: { CONTRACT: { pending: true, pinned: false, chain: "ethereum" } },
+    book: { CONTRACT: { pending: true, pinned: false, chain: "unknown-evm" } },
   },
   {
     voice: "vega_dump",
@@ -609,7 +609,7 @@ async function main() {
           }),
           coingeckoId: match.coingeckoId,
           binanceSymbol: match.binanceSymbol,
-          chain: plan.chain ?? (match.matchType === "solana" ? "solana" : match.matchType === "evm" ? "ethereum" : null),
+          chain: plan.chain ?? (match.matchType === "solana" ? "solana" : match.matchType === "evm" ? "unknown-evm" : null),
           contractAddress: match.contractAddress,
           confidence: match.confidence,
           confidenceReason: match.confidenceReason,
@@ -654,7 +654,7 @@ async function main() {
         }),
         coingeckoId: low ? null : (known?.id ?? match.coingeckoId),
         binanceSymbol: low ? null : (known?.binance ?? match.binanceSymbol),
-        chain: plan.chain ?? (match.matchType === "solana" ? "solana" : match.matchType === "evm" ? "ethereum" : null),
+        chain: plan.chain ?? (match.matchType === "solana" ? "solana" : match.matchType === "evm" ? "unknown-evm" : null),
         contractAddress: match.contractAddress,
         confidence: low ? "low" : "high",
         confidenceReason: low

@@ -46,7 +46,7 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
             join ranked r on r.id = m.id
             where m.pinned = false
               and m.resolution_status = 'pending'
-            order by r.call_rank asc, m.created_at asc
+            order by r.call_rank asc, m.price_attempts asc, m.created_at asc
             limit ${resolveLimit}
           `),
         ).map((row) => row.id)
@@ -91,6 +91,10 @@ export async function runPriceJob(options?: { limit?: number; mentionIds?: strin
             confidenceReason: resolved.confidenceReason,
             resolutionStatus: resolved.resolutionStatus,
             priceStatus: resolved.resolutionStatus === "unresolved" ? "unavailable" : mention.priceStatus,
+            priceAttempts:
+              resolved.chain === "unknown-evm" && resolved.resolutionStatus === "pending"
+                ? mention.priceAttempts + 1
+                : mention.priceAttempts,
             updatedAt: new Date(),
           })
           .where(eq(mentions.id, mention.id))

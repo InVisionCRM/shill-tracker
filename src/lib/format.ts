@@ -103,6 +103,7 @@ export function chainLabel(chain: string | null | undefined) {
   if (!chain) return null
   const labels: Record<string, string> = {
     pulsechain: "PulseChain",
+    "unknown-evm": "Unknown EVM",
     ethereum: "Ethereum",
     solana: "Solana",
     bsc: "BSC",
@@ -115,6 +116,7 @@ export function chainShort(chain: string | null | undefined) {
   if (!chain) return null
   const labels: Record<string, string> = {
     pulsechain: "PLS",
+    "unknown-evm": "EVM",
     ethereum: "ETH",
     solana: "SOL",
     bsc: "BSC",

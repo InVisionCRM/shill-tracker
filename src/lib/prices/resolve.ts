@@ -17,7 +17,7 @@ export type ResolvedAsset = {
   geckoterminalNetwork: string | null
   confidence: "high" | "medium" | "low"
   confidenceReason: string
-  resolutionStatus: "resolved" | "unresolved"
+  resolutionStatus: "resolved" | "pending" | "unresolved"
   assetKey: string | null
 }
 
@@ -41,6 +41,128 @@ type DexPair = {
   baseToken?: { address?: string; symbol?: string; name?: string }
   liquidity?: { usd?: number }
   volume?: { h24?: number }
+}
+
+/** PulseChain first. This archive is mostly PulseChain, and the same 0x address can exist on Ethereum. */
+export const EVM_CHAIN_PREFERENCE = [
+  "pulsechain",
+  "ethereum",
+  "base",
+  "bsc",
+  "polygon",
+  "arbitrum",
+  "optimism",
+  "avalanche",
+] as const
+
+const CHAIN_ALIASES: Record<string, string> = {
+  pulse: "pulsechain",
+  pulsechain: "pulsechain",
+  eth: "ethereum",
+  ethereum: "ethereum",
+  bsc: "bsc",
+  binance: "bsc",
+  "binance-smart-chain": "bsc",
+  base: "base",
+  polygon: "polygon",
+  matic: "polygon",
+  arbitrum: "arbitrum",
+  optimism: "optimism",
+  avalanche: "avalanche",
+  avax: "avalanche",
+}
+
+const GT_NETWORK_TO_CHAIN: Record<string, string> = {
+  pulsechain: "pulsechain",
+  eth: "ethereum",
+  bsc: "bsc",
+  base: "base",
+  polygon_pos: "polygon",
+  arbitrum: "arbitrum",
+  optimism: "optimism",
+  avax: "avalanche",
+}
+
+export function canonicalChain(chainId: string | null | undefined) {
+  if (!chainId) return null
+  const key = chainId.trim().toLowerCase()
+  if (!key || key === "unknown-evm") return null
+  return CHAIN_ALIASES[key] ?? key
+}
+
+const PULSE_FLOOR_USD = 20_000
+
+export function pickEvmPair<T extends { chainId?: string | null; liquidity?: { usd?: number } | null }>(
+  pairs: T[],
+): T | null {
+  if (!pairs.length) return null
+  const ranked = [...pairs].sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))
+  const bestOn = (chain: string) => ranked.find((pair) => canonicalChain(pair.chainId) === chain)
+  const pulse = bestOn("pulsechain")
+  const other = ranked.find((pair) => canonicalChain(pair.chainId) !== "pulsechain")
+  const pulseLiquidity = pulse?.liquidity?.usd ?? 0
+  const otherLiquidity = other?.liquidity?.usd ?? 0
+  // A copied Ethereum contract can have a dust PulseChain pool. Prefer PulseChain when
+  // that pool is a real market, or when nothing else is listed.
+  if (
+    pulse &&
+    (!other || pulseLiquidity >= PULSE_FLOOR_USD || pulseLiquidity >= otherLiquidity * 0.2)
+  ) {
+    return pulse
+  }
+  for (const chain of EVM_CHAIN_PREFERENCE) {
+    if (chain === "pulsechain") continue
+    const hit = bestOn(chain)
+    if (hit) return hit
+  }
+  return ranked[0]
+}
+
+/** Pair choice for an 0x contract. Empty input stays unknown-evm so a later pass can try again. */
+export function resolveEvmContract(address: string, pairs: DexPair[]): ResolvedAsset {
+  const normalized = address.startsWith("0x") ? address.toLowerCase() : address
+  const matching = pairs.filter((pair) => baseMatches(pair, normalized))
+  const best = pickEvmPair(matching)
+  if (!best) {
+    return pack({
+      symbol: null,
+      assetName: null,
+      coingeckoId: null,
+      binanceSymbol: null,
+      chain: "unknown-evm",
+      contractAddress: normalized,
+      pairAddress: null,
+      dexscreenerUrl: null,
+      geckoterminalNetwork: null,
+      confidence: "low",
+      confidenceReason:
+        "No PulseChain, Ethereum, Base, or BSC pair yet. Stored as unknown-evm so a later pass can resolve the chain.",
+      resolutionStatus: "pending",
+    })
+  }
+  const chain = canonicalChain(best.chainId) ?? "unknown-evm"
+  const liquidity = best.liquidity?.usd ?? 0
+  const confidence = liquidity >= 100_000 ? "high" : liquidity >= 20_000 ? "medium" : "low"
+  return pack({
+    symbol: best.baseToken?.symbol?.toUpperCase() ?? null,
+    assetName: best.baseToken?.name ?? null,
+    coingeckoId: null,
+    binanceSymbol: null,
+    chain,
+    contractAddress: normalized,
+    pairAddress: best.pairAddress?.startsWith("0x") ? best.pairAddress.toLowerCase() : (best.pairAddress ?? null),
+    dexscreenerUrl: best.url ?? null,
+    geckoterminalNetwork: chain ? (CHAIN_TO_GECKOTERMINAL[chain] ?? null) : null,
+    confidence,
+    confidenceReason: `${best.baseToken?.symbol ?? "Token"} on ${chain}, preferred pair has ${formatCap(liquidity)} liquidity.`,
+    resolutionStatus: chain === "unknown-evm" ? "pending" : "resolved",
+  })
+}
+
+function baseMatches(pair: DexPair, address: string) {
+  const base = pair.baseToken?.address?.toLowerCase()
+  if (!base) return false
+  return base === address.toLowerCase()
 }
 
 async function cached<T>(key: string, ttlMs: number, loader: () => Promise<T>): Promise<T> {
@@ -149,57 +271,68 @@ export async function resolveSymbol(symbol: string): Promise<ResolvedAsset> {
   })
 }
 
-export async function resolveContract(address: string, hintedChain?: string | null): Promise<ResolvedAsset> {
+export async function resolveContract(address: string, _hintedChain?: string | null): Promise<ResolvedAsset> {
+  const normalized = address.startsWith("0x") ? address.toLowerCase() : address
+  let pairs = await loadDexPairs(normalized)
+  const sawPulse = pairs.some((pair) => canonicalChain(pair.chainId) === "pulsechain")
+  if (normalized.startsWith("0x") && !sawPulse) {
+    try {
+      pairs = [...pairs, ...(await loadGeckoPairs(normalized))]
+    } catch (error) {
+      if (!pickEvmPair(pairs.filter((pair) => baseMatches(pair, normalized)))) throw error
+    }
+  }
+  return resolveEvmContract(normalized, pairs)
+}
+
+async function loadDexPairs(address: string) {
   const data = await cached(`dex-token:${address.toLowerCase()}`, 6 * 60 * 60 * 1000, () =>
-    fetchJson<{ pairs?: DexPair[] | null }>(
-      `https://api.dexscreener.com/latest/dex/tokens/${address}`,
-      { minIntervalMs: 280 },
+    fetchJson<{ pairs?: DexPair[] | null }>(`https://api.dexscreener.com/latest/dex/tokens/${address}`, {
+      minIntervalMs: 280,
+    }),
+  )
+  return data.pairs ?? []
+}
+
+type GtPool = {
+  id?: string
+  attributes?: { address?: string; name?: string; reserve_in_usd?: string }
+  relationships?: { base_token?: { data?: { id?: string } } }
+}
+
+async function loadGeckoPairs(address: string): Promise<DexPair[]> {
+  const data = await cached(`gt-pools:${address.toLowerCase()}`, 6 * 60 * 60 * 1000, () =>
+    fetchJson<{ data?: GtPool[] | null }>(
+      `https://api.geckoterminal.com/api/v2/search/pools?query=${address}`,
+      { headers: { accept: "application/json;version=20230302" }, minIntervalMs: 1300 },
     ),
   )
-  const pairs = (data.pairs ?? []).filter((pair) => {
-    const base = pair.baseToken?.address?.toLowerCase()
-    if (!base) return false
-    if (base !== address.toLowerCase() && !address.startsWith("0x")) {
-      return base === address
-    }
-    return base === address.toLowerCase()
-  })
-  const best = [...pairs].sort(
-    (a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0),
-  )[0]
-  if (!best) {
-    return pack({
-      symbol: null,
-      assetName: null,
-      coingeckoId: null,
-      binanceSymbol: null,
-      chain: hintedChain ?? null,
-      contractAddress: address,
-      pairAddress: null,
-      dexscreenerUrl: null,
-      geckoterminalNetwork: null,
-      confidence: "low",
-      confidenceReason: "DexScreener has no pair for this contract.",
-      resolutionStatus: "unresolved",
+  const pairs: DexPair[] = []
+  for (const pool of data.data ?? []) {
+    const baseId = pool.relationships?.base_token?.data?.id?.toLowerCase() ?? ""
+    if (!baseId.endsWith(address.toLowerCase())) continue
+    const network = networkFromPoolId(pool.id ?? "")
+    if (!network) continue
+    const name = pool.attributes?.name ?? ""
+    const symbol = name.split("/")[0]?.trim() || null
+    const reserve = Number(pool.attributes?.reserve_in_usd)
+    pairs.push({
+      chainId: GT_NETWORK_TO_CHAIN[network] ?? network,
+      pairAddress: pool.attributes?.address,
+      url: pool.attributes?.address
+        ? `https://www.geckoterminal.com/${network}/pools/${pool.attributes.address}`
+        : undefined,
+      baseToken: { address, symbol: symbol ?? undefined, name: symbol ?? undefined },
+      liquidity: { usd: Number.isFinite(reserve) ? reserve : 0 },
     })
   }
-  const liquidity = best.liquidity?.usd ?? 0
-  const confidence = liquidity >= 100_000 ? "high" : liquidity >= 20_000 ? "medium" : "low"
-  const chain = best.chainId ?? hintedChain ?? null
-  return pack({
-    symbol: best.baseToken?.symbol?.toUpperCase() ?? null,
-    assetName: best.baseToken?.name ?? null,
-    coingeckoId: null,
-    binanceSymbol: null,
-    chain,
-    contractAddress: address.startsWith("0x") ? address.toLowerCase() : address,
-    pairAddress: best.pairAddress ?? null,
-    dexscreenerUrl: best.url ?? null,
-    geckoterminalNetwork: chain ? (CHAIN_TO_GECKOTERMINAL[chain] ?? null) : null,
-    confidence,
-    confidenceReason: `${best.baseToken?.symbol ?? "Token"} on ${chain ?? "unknown chain"}, most liquid pair has ${formatCap(liquidity)} liquidity.`,
-    resolutionStatus: "resolved",
-  })
+  return pairs
+}
+
+function networkFromPoolId(id: string) {
+  const marker = id.toLowerCase().lastIndexOf("_0x")
+  if (marker <= 0) return null
+  return id.slice(0, marker).toLowerCase()
 }
 
 async function searchDex(symbol: string): Promise<ResolvedAsset | null> {

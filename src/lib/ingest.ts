@@ -264,7 +264,7 @@ export async function ingestPosts(input: IngestPayload, options?: { deferPricing
           geckoterminalNetwork: match.geckoterminalNetwork ?? null,
           chain:
             match.chain ??
-            (match.matchType === "solana" ? "solana" : match.matchType === "evm" ? "ethereum" : null),
+            (match.matchType === "solana" ? "solana" : match.matchType === "evm" ? "unknown-evm" : null),
           confidence: match.confidence,
           confidenceReason: match.confidenceReason,
           resolutionStatus: match.resolutionStatus,

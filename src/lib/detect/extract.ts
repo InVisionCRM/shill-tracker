@@ -202,7 +202,8 @@ export function identifyFast(
     confidenceReason:
       match.matchType === "solana"
         ? "Solana mint detected. Waiting on DexScreener for the most liquid pair."
-        : "EVM contract detected. Waiting on DexScreener for the most liquid pair.",
+        : "EVM contract detected. Chain stays unknown-evm until a pair lookup checks PulseChain, then Ethereum, Base, and BSC.",
+    chain: match.matchType === "solana" ? "solana" : "unknown-evm",
     resolutionStatus: "pending",
   }
 }
