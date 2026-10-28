@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { PostText } from "@/components/post-text"
 import { RelativeTime } from "@/components/animated-number"
-import { UntrackButton } from "@/components/voice-actions"
+import { UntrackLauncher } from "@/components/track-voice-button"
 import { VoiceAvatar } from "@/components/voice-avatar"
 import { RoiHeatmap, TickerDonut } from "@/components/mix-charts"
 import { TokenLogo } from "@/components/token-logo"
@@ -28,7 +28,13 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
   return { title: `@${handle}`, description, openGraph: { title: `@${handle} on Shill Tracker`, description } }
 }
 
-export default async function InfluencerPage({ params }: { params: Promise<{ username: string }> }) {
+export default async function InfluencerPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ username: string }>
+  searchParams: Promise<{ archive?: string }>
+}) {
   const { username } = await params
   return (
     <div className="flex flex-col gap-6">
@@ -37,14 +43,18 @@ export default async function InfluencerPage({ params }: { params: Promise<{ use
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">@{username}</h1>
       </div>
       <Suspense fallback={<div className="min-h-[100svh]" aria-hidden />}>
-        <Profile username={username} />
+        <Profile username={username} searchParams={searchParams} />
       </Suspense>
     </div>
   )
 }
 
-async function Profile({ username }: { username: string }) {
+/** Archive posts rendered up front. Each one is several KB of HTML plus its RSC copy; the rest load on request. */
+const ARCHIVE_FIRST = 10
+
+async function Profile({ username, searchParams }: { username: string; searchParams: Promise<{ archive?: string }> }) {
   await connection()
+  const showAll = (await searchParams).archive === "all"
   const data = await getInfluencer(username)
   if (!data) notFound()
   const { influencer, stats, mentions, posts } = data
@@ -99,6 +109,7 @@ async function Profile({ username }: { username: string }) {
     ? packFrom(allScores, peek(allScores.bestMentionId), peek(allScores.worstMentionId), allPositions, allComplete, stats?.uniqueTickers ?? 0)
     : firstPack
   const shownFirst = data.firstCalls.slice(0, 40)
+  const shownPosts = showAll ? posts : posts.slice(0, ARCHIVE_FIRST)
   const earliest = data.firstCalls[data.firstCalls.length - 1] ?? null
   const logos = await logosForSymbols(
     [...shownFirst.map((call) => call.symbol), earliest?.symbol].filter((symbol): symbol is string => Boolean(symbol)),
@@ -126,7 +137,7 @@ async function Profile({ username }: { username: string }) {
             </p>
           </div>
         </div>
-        {influencer.tracked ? <UntrackButton username={influencer.username} /> : null}
+        {influencer.tracked ? <UntrackLauncher username={influencer.username} /> : null}
       </header>
 
       <StatBento
@@ -196,13 +207,21 @@ async function Profile({ username }: { username: string }) {
 
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">Archive</h2>
-        {data.postTotal > posts.length ? (
+        {data.postTotal > shownPosts.length ? (
           <p className="text-xs text-muted-foreground">
-            Showing {posts.length} of {data.postTotal} posts. The newest stay on this page.
+            Showing {shownPosts.length} of {data.postTotal} posts.
+            {!showAll && posts.length > shownPosts.length ? (
+              <>
+                {" "}
+                <Link href={`/influencers/${influencer.username}?archive=all`} className="text-phosphor hover:underline" scroll={false}>
+                  Show {posts.length - shownPosts.length} more
+                </Link>
+              </>
+            ) : null}
           </p>
         ) : null}
         <ul className="flex flex-col gap-3">
-          {posts.map((post) => (
+          {shownPosts.map((post) => (
             <li key={post.id} className="rounded-xl border bg-card/70 p-4">
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <RelativeTime iso={post.createdAt.toISOString()} />

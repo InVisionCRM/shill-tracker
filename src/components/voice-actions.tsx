@@ -76,10 +76,10 @@ export function TrackVoiceDialog({ defaultOpen = false }: { defaultOpen?: boolea
   )
 }
 
-export function UntrackButton({ username }: { username: string }) {
+export function UntrackButton({ username, defaultOpen = false }: { username: string; defaultOpen?: boolean }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger render={<Button variant="outline" />}>Stop tracking</AlertDialogTrigger>
