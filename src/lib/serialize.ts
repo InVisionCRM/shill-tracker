@@ -23,6 +23,7 @@ type FeedRow = {
   priceSource: string | null
   priceMatch?: string | null
   priceAtTs?: Date | null
+  repeatCount?: number | null
   pinned: boolean
   isDemo: boolean
   createdAt: Date

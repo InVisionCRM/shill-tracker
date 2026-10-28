@@ -1,9 +1,9 @@
 import { and, desc, eq, getTableColumns, ilike, inArray, or, sql } from "drizzle-orm"
 import { getDb } from "./db"
 import { influencerStats, influencers, mentions, posts, pulseTokens, quotes } from "./db/schema"
-import { assetPartition, callRankWindow } from "./scoring/call-rank"
+import { assetPartition, callRankWindow, firstMentionIds, repeatCountFor } from "./scoring/call-rank"
 import { downsample, type Candle } from "./scoring/evaluate"
-import type { PositionDTO, PricingProgress, ScoreSnapshot } from "./types"
+import type { PositionDTO, PricingProgress } from "./types"
 
 const PRICED_MARKETS: { symbol: string; chain: string | null; imageUrl: string | null }[] = [
   { symbol: "BTC", chain: null, imageUrl: null },
@@ -57,10 +57,10 @@ export async function getOverview() {
     voices: counts?.voices ?? 0,
     demoVoices: counts?.demoVoices ?? 0,
     posts: postCount?.posts ?? 0,
-    shills: progress.allTotal,
+    shills: progress.firstTotal,
     flagged: progress.firstFlagged,
-    priced: progress.allPriced,
-    pending: progress.phase === "first" ? progress.firstPending : progress.allPending,
+    priced: progress.firstPriced,
+    pending: progress.firstPending,
     firstPriced: progress.firstPriced,
     firstTotal: progress.firstTotal,
     median7d: progress.median7d,
@@ -110,14 +110,12 @@ async function mentionProgress(): Promise<PricingProgress & { firstFlagged: numb
   const firstTotal = Number(row?.first_total ?? 0)
   const firstPriced = Number(row?.first_priced ?? 0)
   const firstPending = Number(row?.first_pending ?? 0)
-  const phase: PricingProgress["phase"] =
-    firstTotal > 0 && firstPriced < firstTotal ? "first" : allPriced < allTotal ? "repeat" : "done"
-  const headlinePriced = phase === "first" ? firstPriced : phase === "repeat" ? allPriced - firstPriced : allPriced
-  const headlineTotal = phase === "first" ? firstTotal : phase === "repeat" ? allTotal - firstTotal : allTotal
+  // Repeats are never priced or shown, so progress is first calls only.
+  const phase: PricingProgress["phase"] = firstTotal > 0 && firstPriced < firstTotal ? "first" : "done"
   return {
-    priced: headlinePriced,
-    total: headlineTotal,
-    pending: phase === "first" ? firstPending : allPending,
+    priced: firstPriced,
+    total: firstTotal,
+    pending: firstPending,
     phase,
     firstPriced,
     firstTotal,
@@ -196,15 +194,17 @@ export async function getInfluencer(username: string) {
   const stats = rows[0].influencer_stats
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { series: _series, ...mentionCols } = getTableColumns(mentions)
+  // First call per asset only: repeats are never listed or scored.
+  const isFirst = sql`${mentions.id} in (${firstMentionIds})`
   const [mentionCount] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(mentions)
-    .where(eq(mentions.influencerId, influencer.id))
+    .where(and(eq(mentions.influencerId, influencer.id), isFirst))
   const mentionTotal = mentionCount?.n ?? 0
   const mentionRows = await db
     .select(mentionCols)
     .from(mentions)
-    .where(eq(mentions.influencerId, influencer.id))
+    .where(and(eq(mentions.influencerId, influencer.id), isFirst))
     .orderBy(desc(mentions.createdAt))
     .limit(mentionTotal > 400 ? 80 : 400)
   const extraIds = [stats?.bestMentionId, stats?.worstMentionId].filter((id): id is string => Boolean(id))
@@ -213,14 +213,16 @@ export async function getInfluencer(username: string) {
     const extra = await db.select(mentionCols).from(mentions).where(inArray(mentions.id, missing))
     mentionRows.push(...extra)
   }
+  // Archive: only posts that carry at least one first call. A post that only repeats tickers is skipped.
+  const hasFirst = sql`exists (select 1 from mentions pm where pm.post_id = ${posts.id} and pm.id in (${firstMentionIds}))`
   const [postCount] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(posts)
-    .where(eq(posts.influencerId, influencer.id))
+    .where(and(eq(posts.influencerId, influencer.id), hasFirst))
   const postRows = await db
     .select()
     .from(posts)
-    .where(eq(posts.influencerId, influencer.id))
+    .where(and(eq(posts.influencerId, influencer.id), hasFirst))
     .orderBy(desc(posts.createdAt))
     .limit(30)
   const mixResult = await db.execute(sql`
@@ -250,27 +252,25 @@ export async function getInfluencer(username: string) {
       roi_1h, roi_24h, roi_7d, roi_30d, roi_now,
       pump_dump_flag, pinned, price_source, price_now, price_match, price_at_ts
     from (
-      select distinct on (${assetPartition})
+      select
         id, symbol, asset_name, asset_key, chain, created_at, price_at,
         roi_1h, roi_24h, roi_7d, roi_30d, roi_now,
         pump_dump_flag, pinned, price_source, price_now, price_match, price_at_ts
       from mentions
       where influencer_id = ${influencer.id}
-        and call_kind = 'call'
+        and id in (${firstMentionIds})
         and resolution_status <> 'unresolved'
         and price_status is distinct from 'unverifiable'
-      order by ${assetPartition}, created_at asc, id asc
     ) firsts
     order by created_at desc
   `)
   const repeatResult = await db.execute(sql`
     select
       ${assetPartition} as key,
-      max(symbol) as symbol,
-      count(*)::int as n,
-      avg(roi_7d)::float8 as roi
+      max(upper(symbol)) as symbol,
+      count(*)::int as n
     from mentions
-    where influencer_id = ${influencer.id} and symbol is not null
+    where influencer_id = ${influencer.id} and symbol is not null and call_kind = 'call'
     group by 1
     having count(*) > 1
     order by n desc
@@ -279,14 +279,6 @@ export async function getInfluencer(username: string) {
   const mixRows = resultRows<{ symbol: string; chain: string | null; n: number }>(mixResult)
   const weekRows = resultRows<{ week: string; roi: number | null }>(weekResult).reverse()
   const firstRows = resultRows<FirstCallRow>(firstResult).map(mapFirstCall)
-  const allSnapshot = (stats?.allScores ?? null) as ScoreSnapshot | null
-  const extraScoreIds = [allSnapshot?.bestMentionId, allSnapshot?.worstMentionId].filter(
-    (id): id is string => Boolean(id) && !mentionRows.some((row) => row.id === id),
-  )
-  if (extraScoreIds.length) {
-    const extra = await db.select(mentionCols).from(mentions).where(inArray(mentions.id, extraScoreIds))
-    mentionRows.push(...extra)
-  }
   return {
     influencer,
     stats,
@@ -297,11 +289,10 @@ export async function getInfluencer(username: string) {
     mix: mixRows.map((row) => ({ symbol: row.symbol, chain: row.chain, count: Number(row.n) })),
     weeks: weekRows.map((row) => ({ week: row.week, roi: row.roi == null ? null : Number(row.roi) })),
     firstCalls: firstRows,
-    repeats: resultRows<{ key: string; symbol: string; n: number; roi: number | null }>(repeatResult).map((row) => ({
+    repeats: resultRows<{ key: string; symbol: string; n: number }>(repeatResult).map((row) => ({
       key: row.key,
       symbol: row.symbol,
       count: Number(row.n),
-      avg: row.roi == null ? null : Number(row.roi),
     })),
   }
 }
@@ -424,7 +415,7 @@ export async function getTicker(symbol: string) {
     .from(mentions)
     .innerJoin(influencers, eq(influencers.id, mentions.influencerId))
     .innerJoin(posts, eq(posts.id, mentions.postId))
-    .where(match)
+    .where(and(match, sql`${mentions.id} in (${firstMentionIds})`))
     .orderBy(desc(mentions.createdAt))
     .limit(40)
   const [count] = await db
@@ -433,7 +424,7 @@ export async function getTicker(symbol: string) {
       avg: sql<number | null>`avg(${mentions.roi7d}) filter (where ${mentions.callKind} = 'call' and ${mentions.priceStatus} is distinct from 'unverifiable')::float8`,
     })
     .from(mentions)
-    .where(match)
+    .where(and(match, sql`${mentions.id} in (${firstMentionIds})`))
   const firstResult = await db.execute(sql`
     select
       m.id,
@@ -459,10 +450,9 @@ export async function getTicker(symbol: string) {
       i.name,
       counts.n as mention_count
     from (
-      select distinct on (influencer_id)
-        id
+      select id
       from mentions
-      where call_kind = 'call'
+      where id in (${firstMentionIds})
         and resolution_status <> 'unresolved'
         and price_status is distinct from 'unverifiable'
         and (
@@ -470,16 +460,15 @@ export async function getTicker(symbol: string) {
           or contract_address = ${normalized}
           or coingecko_id = ${normalized.toLowerCase()}
         )
-      order by influencer_id, created_at asc, id asc
     ) firsts
     join mentions m on m.id = firsts.id
     join influencers i on i.id = m.influencer_id
     join (
       select influencer_id, count(*)::int as n
       from mentions
-      where upper(symbol) = upper(${normalized})
+      where call_kind = 'call' and (upper(symbol) = upper(${normalized})
         or contract_address = ${normalized}
-        or coingecko_id = ${normalized.toLowerCase()}
+        or coingecko_id = ${normalized.toLowerCase()})
       group by influencer_id
     ) counts on counts.influencer_id = m.influencer_id
     order by m.created_at asc
@@ -580,11 +569,14 @@ export async function getFeed(limit = 40) {
       profileImageUrl: influencers.profileImageUrl,
       followersCount: influencers.followersCount,
       influencerDemo: influencers.isDemo,
+      repeatCount: sql<number>`${repeatCountFor('"mentions"')}`.mapWith(Number),
     })
     .from(mentions)
     .innerJoin(posts, eq(posts.id, mentions.postId))
     .innerJoin(influencers, eq(influencers.id, mentions.influencerId))
     .leftJoin(pulseTokens, sql`lower(${mentions.contractAddress}) = ${pulseTokens.address}`)
+    // One row per (voice, asset): the first call. Repeats never reach the feed.
+    .where(sql`${mentions.id} in (${firstMentionIds})`)
     .orderBy(desc(mentions.createdAt))
     .limit(limit)
 }
@@ -617,10 +609,13 @@ export async function searchAll(query: string) {
     .from(mentions)
     .innerJoin(influencers, eq(influencers.id, mentions.influencerId))
     .where(
-      or(
-        ilike(mentions.symbol, `%${q}%`),
-        ilike(mentions.assetName, `%${q}%`),
-        eq(mentions.contractAddress, q),
+      and(
+        sql`${mentions.id} in (${firstMentionIds})`,
+        or(
+          ilike(mentions.symbol, `%${q}%`),
+          ilike(mentions.assetName, `%${q}%`),
+          eq(mentions.contractAddress, q),
+        ),
       ),
     )
     .orderBy(desc(mentions.createdAt))

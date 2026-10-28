@@ -78,9 +78,9 @@ describe("aggregateInfluencer", () => {
     mention("a", 0.05, false, 3, "m-a-3"),
   ]
 
-  it("scores the first mention of each asset and still counts every shill", () => {
+  it("scores the first mention of each asset; shill count is first calls only", () => {
     const stats = aggregateInfluencer(calls)
-    expect(stats.shillCount).toBe(3)
+    expect(stats.shillCount).toBe(2)
     expect(stats.uniqueTickers).toBe(2)
     expect(stats.repeatAssets).toBe(1)
     expect(stats.pricedCount).toBe(2)

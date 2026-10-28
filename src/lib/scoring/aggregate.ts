@@ -22,14 +22,17 @@ export type StatMention = {
   priceStatus?: string | null
 }
 
-/** Asset identity for "first call" grouping. Nameless rows stay their own group. */
+/**
+ * Ticker identity for "first call" grouping: cashtag first, then asset key, then the row itself.
+ * Symbol first so a partly resolved ticker never splits into two first calls. Matches tickerKey() in SQL.
+ */
 export function assetGroupKey(mention: {
   id: string
   assetKey: string | null
   symbol: string | null
 }) {
-  if (mention.assetKey) return mention.assetKey
   if (mention.symbol) return `sym:${mention.symbol.toUpperCase()}`
+  if (mention.assetKey) return mention.assetKey
   return mention.id
 }
 
@@ -107,7 +110,15 @@ export function aggregateInfluencer(
   mode: ScoreMode = "first",
 ): InfluencerAggregate {
   const eligible = mentions.filter((mention) => countsTowardScore(mention))
-  const scored = mode === "all" ? eligible : firstCalls(eligible)
+  // "first": the voice's earliest CALL of each asset, picked before price/resolution eligibility. A later
+  // repeat never stands in for a first call that is unverifiable or unresolved; that asset is just unscored.
+  // Same rule as firstMentionIds / callRankWindow in SQL.
+  const scored =
+    mode === "all"
+      ? eligible
+      : firstCalls(mentions.filter((mention) => (mention.callKind ?? "call") === "call")).filter((mention) =>
+          countsTowardScore(mention),
+        )
   const horizons = {
     "1h": horizonStats(nums(scored, "1h")),
     "24h": horizonStats(nums(scored, "24h")),
@@ -162,7 +173,7 @@ export function aggregateInfluencer(
   }
 
   return {
-    shillCount: eligible.length,
+    shillCount: scored.length,
     uniqueTickers: keys.size,
     pricedCount: scored.filter((mention) => mention.priceAt != null).length,
     horizons,

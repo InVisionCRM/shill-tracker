@@ -1,11 +1,7 @@
-"use client"
-
-import { useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Gauge } from "@/components/gauge"
 import { PortfolioPanel, type StoredBook } from "@/components/portfolio-panel"
-import { ScopeToggle } from "@/components/scope-toggle"
 import { formatCallDate, formatRoi, formatUsd, roiClass } from "@/lib/format"
 import type { PositionDTO } from "@/lib/types"
 
@@ -39,30 +35,22 @@ export type ScorePack = {
 export function VoiceScores({
   shillCount,
   repeatAssets,
-  first,
-  all,
+  first: pack,
   repeats,
 }: {
   shillCount: number
   repeatAssets: number
   first: ScorePack
-  all: ScorePack
-  repeats: { key: string; symbol: string; count: number; avg: number | null }[]
+  repeats: { key: string; symbol: string; count: number }[]
 }) {
-  const [mode, setMode] = useState<"first" | "all">("first")
-  const pack = mode === "first" ? first : all
-  const noun = mode === "first" ? "first call" : "mention"
+  const noun = "first call"
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <ScopeToggle value={mode} onChange={setMode} />
-        <p className="text-xs leading-5 text-muted-foreground sm:max-w-md sm:text-right">
-          {mode === "first"
-            ? "ROI, win rate, the $100 book, and dump flags use the first mention of each ticker."
-            : "Those scores include every mention. Shill count stays the total."}{" "}
-          {shillCount.toLocaleString("en-US")} shills · {repeatAssets.toLocaleString("en-US")} repeat tickers.
-        </p>
-      </div>
+      <p className="text-xs leading-5 text-muted-foreground">
+        Every ticker counts once, at this voice&apos;s first call of it. ROI, win rate, the $100 book, and dump flags
+        ignore repeats. {shillCount.toLocaleString("en-US")} first calls · {repeatAssets.toLocaleString("en-US")}{" "}
+        tickers named again later.
+      </p>
 
       <section className="grid gap-3 lg:grid-cols-2">
         <Card>
@@ -101,13 +89,13 @@ export function VoiceScores({
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>{mode === "first" ? "If you bought every first call" : "If you bought every mention"}</CardTitle>
+            <CardTitle>If you bought every first call</CardTitle>
             <CardDescription>Fixed $100 stake at the post-time candle. Pick a hold.</CardDescription>
           </CardHeader>
           <CardContent>
             <PortfolioPanel
               positions={pack.positions}
-              scope={mode}
+              scope="first"
               stored={pack.complete ? null : pack.book}
             />
           </CardContent>
@@ -116,16 +104,14 @@ export function VoiceScores({
           <CardHeader>
             <CardTitle>Best and worst</CardTitle>
             <CardDescription>
-              {mode === "first"
-                ? "Best and worst first call, preferring the 7 day print."
-                : "Best and worst mention, preferring the 7 day print."}
+              Best and worst first call, preferring the 7 day print.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <CallLink label="Best" mention={pack.best} />
             <CallLink label="Worst" mention={pack.worst} />
             <div>
-              <p className="text-xs tracking-[0.16em] text-muted-foreground uppercase">Repeat shills</p>
+              <p className="text-xs tracking-[0.16em] text-muted-foreground uppercase">Named again later</p>
               {repeats.length === 0 ? (
                 <p className="mt-2 text-sm text-muted-foreground">No ticker has been named twice.</p>
               ) : (
@@ -133,9 +119,11 @@ export function VoiceScores({
                   {repeats.map((group) => (
                     <li key={group.key} className="flex items-center justify-between gap-3 text-sm">
                       <Link href={`/tickers/${group.symbol}`} className="font-mono text-phosphor hover:underline">
-                        ${group.symbol} · {group.count} times
+                        ${group.symbol}
                       </Link>
-                      <span className={roiClass(group.avg)}>{formatRoi(group.avg)}</span>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {group.count - 1} more {group.count - 1 === 1 ? "time" : "times"} (not scored)
+                      </span>
                     </li>
                   ))}
                 </ul>

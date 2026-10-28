@@ -42,6 +42,7 @@ export async function priceFromCache(options: {
   const monthAgo = new Date(Date.now() - 30 * DAY)
   const selected = await db.execute(sql`
     with ranked as (
+      -- Only a voice's first call of an asset is ever priced or shown; repeats are never queued.
       select id, ${callRankWindow} as call_rank
       from mentions
       where call_kind = 'call'
@@ -82,19 +83,8 @@ export async function priceFromCache(options: {
         or (m.price_30d is null and m.created_at < ${monthAgo})
       )
       and not (m.price_status = 'unavailable' and m.price_attempts >= 5)
-      and (
-        r.call_rank = 1
-        or not exists (
-          select 1
-          from mentions m2
-          join ranked r2 on r2.id = m2.id
-          where r2.call_rank = 1
-            and m2.pinned = false
-            and m2.price_at is null
-            and m2.price_status in ('pending', 'partial')
-        )
-      )
-    order by r.call_rank asc, m.price_attempts asc, m.created_at asc
+      and r.call_rank = 1
+    order by m.price_attempts asc, m.created_at asc
     limit ${options.limit}
   `)
 

@@ -102,6 +102,11 @@ export function FeedBoard({ initial, live = true }: { initial: FeedDTO[]; live?:
                       source={item.priceSource}
                     />
                   </span>
+                  {item.repeatCount ? (
+                    <span className="text-muted-foreground" title="Later mentions are not listed or scored">
+                      First call · mentioned {item.repeatCount} more {item.repeatCount === 1 ? "time" : "times"}
+                    </span>
+                  ) : null}
                   <Link href={`/shills/${item.id}`} className="ml-auto text-foreground hover:underline">
                     Open call
                   </Link>

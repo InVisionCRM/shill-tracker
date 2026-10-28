@@ -15,11 +15,9 @@ import { StatBento } from "@/components/stat-bento"
 import { CallTimeline } from "@/components/call-timeline"
 import type { StoredBook } from "@/components/portfolio-panel"
 import { MentionTags, mentionMuted } from "@/components/mention-tags"
-import { countsTowardScore } from "@/lib/detect/kinds"
 import { chainLabel, formatCallDate, formatCompact, formatRoi, formatUsd } from "@/lib/format"
 import { logosForSymbols } from "@/lib/pulsechain/lookup"
 import { getInfluencer, toPosition } from "@/lib/queries"
-import type { ScoreSnapshot } from "@/lib/types"
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params
@@ -64,20 +62,7 @@ async function Profile({ username, searchParams }: { username: string; searchPar
     list.push(mention)
     byPost.set(mention.postId, list)
   }
-  const firstIds = new Set(data.firstCalls.map((call) => call.id))
   const firstComplete = data.firstCalls.length <= 400
-  const allComplete = data.mentionTotal <= 400
-  const seen = new Set<string>()
-  const allPositions = allComplete
-    ? mentions
-        .filter((mention) => {
-          if (!countsTowardScore(mention)) return false
-          if (seen.has(mention.id)) return false
-          seen.add(mention.id)
-          return true
-        })
-        .map((mention) => toPosition(mention, firstIds.has(mention.id)))
-    : []
   const firstPositions = firstComplete
     ? data.firstCalls.map((call) =>
         toPosition(
@@ -104,10 +89,6 @@ async function Profile({ username, searchParams }: { username: string; searchPar
     }
   }
   const firstPack = packFrom(stats, peek(stats?.bestMentionId), peek(stats?.worstMentionId), firstPositions, firstComplete)
-  const allScores = (stats?.allScores ?? null) as ScoreSnapshot | null
-  const allPack = allScores
-    ? packFrom(allScores, peek(allScores.bestMentionId), peek(allScores.worstMentionId), allPositions, allComplete, stats?.uniqueTickers ?? 0)
-    : firstPack
   const shownFirst = data.firstCalls.slice(0, 20)
   const shownPosts = showAll ? posts : posts.slice(0, ARCHIVE_FIRST)
   const earliest = data.firstCalls[data.firstCalls.length - 1] ?? null
@@ -178,7 +159,6 @@ async function Profile({ username, searchParams }: { username: string; searchPar
         shillCount={stats?.shillCount ?? data.mentionTotal}
         repeatAssets={stats?.repeatAssets ?? data.repeats.length}
         first={firstPack}
-        all={allPack}
         repeats={data.repeats}
       />
 

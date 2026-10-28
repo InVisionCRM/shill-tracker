@@ -26,7 +26,7 @@ export default function TickerPage({ params }: { params: Promise<{ symbol: strin
 async function Ticker({ params }: { params: Promise<{ symbol: string }> }) {
   await connection()
   const { symbol } = await params
-  const { query, rows, total, avg7d, avgFirst7d, firstCalls } = await getTicker(symbol)
+  const { query, rows, avgFirst7d, firstCalls } = await getTicker(symbol)
   const earliest = firstCalls[0] ?? null
   const logoSymbol = earliest?.symbol ?? rows[0]?.mentions.symbol ?? query
   const logoChain = earliest?.chain ?? rows[0]?.mentions.chain
@@ -44,7 +44,6 @@ async function Ticker({ params }: { params: Promise<{ symbol: string }> }) {
       ),
     ),
   ]
-  const firstByUser = new Map(firstCalls.map((call) => [call.username, call]))
   return (
     <div className="flex flex-col gap-6">
       <header>
@@ -56,8 +55,7 @@ async function Ticker({ params }: { params: Promise<{ symbol: string }> }) {
           </h1>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          {(earliest?.assetName ?? rows[0]?.mentions.assetName) ?? "No resolved name yet"} · {total} mentions ·{" "}
-          {firstCalls.length} first calls
+          {(earliest?.assetName ?? rows[0]?.mentions.assetName) ?? "No resolved name yet"} · {firstCalls.length} first calls
           {chains.length ? ` · ${chains.map((chain) => chainLabel(chain)).join(", ")}` : ""}
           {(earliest?.contractAddress ?? rows[0]?.mentions.contractAddress)
             ? ` · ${shortAddress(earliest?.contractAddress ?? rows[0]?.mentions.contractAddress)}`
@@ -90,8 +88,6 @@ async function Ticker({ params }: { params: Promise<{ symbol: string }> }) {
           ) : null}
           <TickerBoard
             avgFirst7d={avgFirst7d}
-            avgAll7d={avg7d}
-            total={total}
             firstCalls={firstCalls.map((call) => ({
               id: call.id,
               username: call.username,
@@ -113,37 +109,7 @@ async function Ticker({ params }: { params: Promise<{ symbol: string }> }) {
               symbol: call.symbol,
               mentionCount: call.mentionCount,
             }))}
-            mentions={rows.map((row) => {
-              const first = firstByUser.get(row.influencers.username)
-              return {
-                id: row.mentions.id,
-                username: row.influencers.username,
-                name: row.influencers.name,
-                createdAt: row.mentions.createdAt.toISOString(),
-                priceAt: row.mentions.priceAt,
-                roi7d: row.mentions.roi7d,
-                roiNow: row.mentions.roiNow,
-                priceNow: row.mentions.priceNow,
-                assetKey: row.mentions.assetKey,
-                pinned: row.mentions.pinned,
-                priceSource: row.mentions.priceSource,
-                pumpDumpFlag: row.mentions.pumpDumpFlag,
-                confidence: row.mentions.confidence,
-                callKind: row.mentions.callKind,
-                priceStatus: row.mentions.priceStatus,
-                assetState: row.mentions.assetState,
-                resolutionConfidence: row.mentions.resolutionConfidence,
-                symbol: row.mentions.symbol,
-                mentionCount: first?.mentionCount ?? 1,
-                isFirstCall: first?.id === row.mentions.id,
-                firstCallAt: (first?.createdAt ?? row.mentions.createdAt).toISOString(),
-                firstCallPrice: first?.priceAt ?? row.mentions.priceAt,
-              }
-            })}
           />
-          {total > rows.length ? (
-            <p className="text-xs text-muted-foreground">All mentions shows the newest {rows.length}.</p>
-          ) : null}
         </>
       )}
     </div>

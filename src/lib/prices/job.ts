@@ -124,7 +124,8 @@ export async function runPriceJob(options?: {
             where m.pinned = false
               and m.call_kind = 'call'
               and m.resolution_status = 'pending'
-            order by r.call_rank asc, m.price_attempts asc, m.created_at asc
+              and r.call_rank = 1
+            order by m.price_attempts asc, m.created_at asc
             limit ${resolveLimit}
           `),
         ).map((row) => row.id)

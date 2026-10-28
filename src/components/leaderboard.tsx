@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useReducedMotion } from "@/lib/client-hooks"
 import { formatCompact, formatRoi, formatUsd, roiClass, dumpTone, scoreTone } from "@/lib/format"
-import type { LeaderRow, ScoreSnapshot } from "@/lib/types"
+import type { LeaderRow } from "@/lib/types"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -25,7 +25,6 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Sparkline } from "./sparkline"
 import { VoiceAvatar } from "./voice-avatar"
-import { ScopeToggle } from "./scope-toggle"
 
 const SORTS = [
   { value: "credibility", label: "Credibility" },
@@ -43,7 +42,6 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
   const [query, setQuery] = useState("")
   const [sort, setSort] = useState<SortKey>("credibility")
   const [minShills, setMinShills] = useState("1")
-  const [mode, setMode] = useState<"first" | "all">("first")
   const reduce = useReducedMotion()
   const previousRanks = useRef<Map<string, number>>(new Map())
   const [deltas, setDeltas] = useState<Map<string, number>>(new Map())
@@ -51,12 +49,11 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
     const needle = query.trim().toLowerCase()
     const min = Number(minShills) || 0
     return rows
-      .map((row) => leaderView(row, mode))
       .filter((row) => row.shillCount >= min)
       .filter((row) => !needle || row.username.includes(needle) || row.name.toLowerCase().includes(needle))
       .slice()
       .sort((a, b) => compare(a, b, sort))
-  }, [rows, query, sort, minShills, mode])
+  }, [rows, query, sort, minShills])
 
   useEffect(() => {
     const next = new Map<string, number>()
@@ -72,14 +69,9 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <ScopeToggle value={mode} onChange={setMode} />
-        <p className="text-xs leading-5 text-muted-foreground sm:max-w-sm sm:text-right">
-          {mode === "first"
-            ? "Ranked on each voice's first mention of a ticker. Shill count is every mention."
-            : "Ranked on every mention. Shill count stays the total."}
-        </p>
-      </div>
+      <p className="text-xs leading-5 text-muted-foreground">
+        Ranked on each voice&apos;s first call of a ticker only. Repeat mentions are not scored or listed.
+      </p>
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input
           value={query}
@@ -262,29 +254,6 @@ function glowClass(roi: number | null | undefined) {
 function rowGlowClass(roi: number | null | undefined) {
   if (roi == null) return ""
   return roi >= 0 ? "row-glow-gain" : "row-glow-loss"
-}
-
-function leaderView(row: LeaderRow, mode: "first" | "all"): LeaderRow {
-  if (mode === "first" || !row.allScores) return row
-  const scores: ScoreSnapshot = row.allScores
-  return {
-    ...row,
-    pricedCount: scores.pricedCount,
-    winRate24h: scores.winRate24h,
-    winRate7d: scores.winRate7d,
-    medianRoi24h: scores.medianRoi24h,
-    medianRoi7d: scores.medianRoi7d,
-    portfolio7d: scores.portfolio7d,
-    portfolioN7d: scores.portfolioN7d,
-    portfolioNow: scores.portfolioNow,
-    portfolioNNow: scores.portfolioNNow,
-    pumpDumpCount: scores.pumpDumpCount,
-    pumpDumpRate: scores.pumpDumpRate,
-    dumpRiskScore: scores.dumpRiskScore,
-    credibilityScore: scores.credibilityScore,
-    credibilityHorizon: scores.credibilityHorizon,
-    sampleSize: scores.sampleSize,
-  }
 }
 
 function compare(a: LeaderRow, b: LeaderRow, sort: SortKey) {

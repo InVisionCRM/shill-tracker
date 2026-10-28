@@ -31,6 +31,8 @@ export type FeedDTO = {
   priceSource: string | null
   priceMatch?: string | null
   priceAtTs?: string | null
+  /** Later mentions of the same ticker by this voice (not listed, not scored). */
+  repeatCount?: number | null
   pinned: boolean
   isDemo: boolean
   createdAt: string
