@@ -4,8 +4,8 @@ import { resolveEvmContract } from "./resolve"
 const PLSX = "0x95b303987a60c71504d99aa1b13b4da07b0790ab"
 const PEPE = "0x6982508145454ce325ddbe47a25d4ec3d2311933"
 
-describe("resolveEvmContract", () => {
-  it("resolves the PulseX contract to pulsechain ahead of a deeper ethereum pair", () => {
+describe("resolveEvmContract (PulseChain tickers only)", () => {
+  it("resolves the PulseX contract to pulsechain and ignores the deeper Ethereum pair entirely", () => {
     const asset = resolveEvmContract(PLSX, [
       {
         chainId: "ethereum",
@@ -31,7 +31,7 @@ describe("resolveEvmContract", () => {
     expect(asset.assetKey).toBe(`ct:pulsechain:${PLSX}`)
   })
 
-  it("does not let a dust PulseChain pool hide the Ethereum market", () => {
+  it("picks even a dust PulseChain pool over a far deeper Ethereum market — PulseChain is the only candidate", () => {
     const asset = resolveEvmContract(PEPE, [
       {
         chainId: "pulsechain",
@@ -46,11 +46,12 @@ describe("resolveEvmContract", () => {
         liquidity: { usd: 30_345_788 },
       },
     ])
-    expect(asset.chain).toBe("ethereum")
-    expect(asset.pairAddress?.toLowerCase()).toBe("0xa43fe16908251ee70ef74718545e4fe6c5ccec9f")
+    expect(asset.chain).toBe("pulsechain")
+    expect(asset.pairAddress).toBe("0xf605e37b1e5095dba82a24812ef504d19ce683ae")
+    expect(asset.confidence).toBe("low")
   })
 
-  it("uses ethereum when that is the first chain that has a pair", () => {
+  it("marks a contract dead on PulseChain instead of resolving to the Ethereum-only pair", () => {
     const asset = resolveEvmContract(PEPE, [
       {
         chainId: "ethereum",
@@ -59,14 +60,15 @@ describe("resolveEvmContract", () => {
         liquidity: { usd: 2_000_000 },
       },
     ])
-    expect(asset.chain).toBe("ethereum")
-    expect(asset.geckoterminalNetwork).toBe("eth")
+    expect(asset.chain).toBe("pulsechain")
+    expect(asset.assetState).toBe("dead")
+    expect(asset.pairAddress).toBeNull()
   })
 
-  it("marks a contract with no liquidity as dead instead of guessing ethereum", () => {
+  it("marks a contract with no liquidity anywhere as dead", () => {
     const dead = "0xe72834590d7a339ead78e7fbd1d3c7f76f6eb430"
     const asset = resolveEvmContract(dead, [])
-    expect(asset.chain).toBe("unknown-evm")
+    expect(asset.chain).toBe("pulsechain")
     expect(asset.assetState).toBe("dead")
     expect(asset.resolutionStatus).toBe("resolved")
     expect(asset.contractAddress).toBe(dead)

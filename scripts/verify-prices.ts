@@ -34,14 +34,13 @@ async function main() {
   )
   lines.push(`eth hourly candles ${candles.candles.length} via ${candles.source}, last ${candles.candles.at(-1)?.p}`)
 
-  const pepe = await resolveContract(PEPE, "ethereum")
+  // PulseChain tickers only: this just checks the resolver still runs end to end. The Ethereum PEPE
+  // contract itself is expected to come back dead (no PulseChain pair), not an error.
+  const pepe = await resolveContract(PEPE)
   lines.push(
     `pepe contract ${pepe.resolutionStatus} ${pepe.symbol} ${pepe.chain} liq-pair ${pepe.pairAddress} confidence ${pepe.confidence}`,
   )
   lines.push(pepe.confidenceReason)
-  if (pepe.resolutionStatus !== "resolved") {
-    throw new Error("PEPE contract did not resolve on DexScreener")
-  }
   const dex = await fetchDexTokenPrices([PEPE])
   lines.push(`dexscreener pepe price ${dex[0]?.price ?? "missing"}`)
 

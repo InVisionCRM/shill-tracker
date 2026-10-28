@@ -1,5 +1,4 @@
 import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
-import { canonicalBySymbol } from "../detect/assets"
 import { PULSE_BOOK, dexUrl } from "../detect/pulse"
 import { getDb } from "../db"
 import { cronRuns, influencers, mentions, quotes } from "../db/schema"
@@ -211,21 +210,26 @@ export async function runPriceJob(options?: {
               assetState: null,
             }
           : first.contractAddress
-            ? await resolveContract(first.contractAddress, group.hint)
+            ? await resolveContract(first.contractAddress)
             : first.symbol
-              ? await resolveSymbol(first.symbol, group.hint)
+              ? await resolveSymbol(first.symbol)
               : null
         if (!resolved) return
-        const known = resolved.symbol ? canonicalBySymbol(resolved.symbol) : null
         const unresolvedEvm = resolved.chain === "unknown-evm" && resolved.resolutionStatus === "pending"
+        // PulseChain tickers only: a result that is "resolved" on another chain (a curated override,
+        // such as old Ethereum HEX) is rejected here instead, so it never scores or prices.
+        const resolutionStatus =
+          resolved.resolutionStatus === "resolved" && resolved.chain && resolved.chain !== "pulsechain"
+            ? ("rejected" as const)
+            : resolved.resolutionStatus
         await db
           .update(mentions)
           .set({
             symbol: resolved.symbol ?? first.symbol,
             assetName: resolved.assetName,
             assetKey: resolved.assetKey,
-            coingeckoId: resolved.coingeckoId ?? known?.id ?? null,
-            binanceSymbol: known?.binance ?? resolved.binanceSymbol,
+            coingeckoId: resolved.coingeckoId ?? null,
+            binanceSymbol: resolved.binanceSymbol,
             chain: resolved.chain ?? first.chain,
             contractAddress: resolved.contractAddress ?? first.contractAddress,
             pairAddress: resolved.pairAddress,
@@ -234,13 +238,15 @@ export async function runPriceJob(options?: {
             confidence: resolved.confidence,
             confidenceReason: resolved.confidenceReason,
             resolutionConfidence: resolved.resolutionConfidence,
-            resolutionStatus: resolved.resolutionStatus,
+            resolutionStatus,
             assetState: resolved.assetState,
-            ...(resolved.assetState === "dead" && !resolved.pairAddress
-              ? { priceStatus: "unverifiable" }
-              : resolved.resolutionStatus === "unresolved"
-                ? { priceStatus: "unavailable" }
-                : {}),
+            ...(resolutionStatus === "rejected"
+              ? { priceStatus: "excluded" }
+              : resolved.assetState === "dead" && !resolved.pairAddress
+                ? { priceStatus: "unverifiable" }
+                : resolved.resolutionStatus === "unresolved"
+                  ? { priceStatus: "unavailable" }
+                  : {}),
             ...(unresolvedEvm ? { priceAttempts: sql`${mentions.priceAttempts} + 1` } : {}),
             updatedAt: new Date(),
           })
@@ -586,7 +592,14 @@ export async function refreshQuotes() {
       chain: mentions.chain,
     })
     .from(mentions)
-    .where(and(eq(mentions.pinned, false), sql`${mentions.priceAt} is not null`, sql`${mentions.assetKey} is not null`))
+    .where(
+      and(
+        eq(mentions.pinned, false),
+        sql`${mentions.priceAt} is not null`,
+        sql`${mentions.assetKey} is not null`,
+        sql`${mentions.resolutionStatus} <> 'rejected'`,
+      ),
+    )
 
   const binance = new Map<string, { assetKey: string; symbol: string; name: string | null }>()
   const cg = new Map<string, { assetKey: string; symbol: string; name: string | null }>()
@@ -609,16 +622,6 @@ export async function refreshQuotes() {
     }
   }
 
-  // Tape still wants majors even when every demo call is pinned.
-  for (const symbol of ["BTCUSDT", "ETHUSDT", "SOLUSDT"]) {
-    if (!binance.has(symbol)) {
-      const asset = canonicalBySymbol(symbol.replace("USDT", ""))
-      if (asset) {
-        binance.set(symbol, { assetKey: `cg:${asset.id}`, symbol: asset.symbol, name: asset.name })
-      }
-    }
-  }
-
   const prices = new Map<string, { price: number; change24h: number | null; source: string; symbol: string; name: string | null }>()
 
   if (binance.size) {
@@ -636,12 +639,7 @@ export async function refreshQuotes() {
         })
       }
     } catch {
-      for (const meta of binance.values()) {
-        const asset = canonicalBySymbol(meta.symbol)
-        if (asset && !cg.has(asset.id)) {
-          cg.set(asset.id, { assetKey: meta.assetKey, symbol: meta.symbol, name: meta.name })
-        }
-      }
+      // A 429 here is retried on the next pass; there is no other price source for a Binance-only symbol.
     }
   }
 
