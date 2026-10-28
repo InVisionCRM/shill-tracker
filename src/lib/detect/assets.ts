@@ -229,7 +229,6 @@ export const CHAIN_TO_GECKOTERMINAL: Record<string, string> = {
   cronos: "cro",
   gnosis: "gnosis",
   pulsechain: "pulsechain",
-  robinhood: "robinhood",
   ton: "ton",
   sui: "sui-network",
 }

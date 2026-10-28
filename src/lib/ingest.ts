@@ -286,7 +286,10 @@ export async function ingestPosts(input: IngestPayload, options?: { deferPricing
           resolutionConfidence: match.resolutionConfidence ?? (match.confidence === "low" ? "ambiguous" : match.confidence),
           resolutionStatus: match.resolutionStatus,
           callKind: match.callKind ?? "call",
-          priceStatus: match.callKind && match.callKind !== "call" ? "excluded" : "pending",
+          priceStatus:
+            (match.callKind && match.callKind !== "call") || match.resolutionStatus === "rejected"
+              ? "excluded"
+              : "pending",
           isDemo: false,
           pinned: false,
           createdAt: post.createdAt,

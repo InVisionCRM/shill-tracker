@@ -23,10 +23,6 @@ export const PDAI_PAIR = "0xfc64556faa683e6087f425819c7ca3c558e13ac1"
 export const TEDDY_CONTRACT = "0xd6c31ba0754c4383a41c0e9df042c62b5e918f6d"
 export const TEDDY_PAIR = "0x24c4d0532cddae3b0b8935196f2b91e68d6b85ed"
 
-/** Crypto NET on Robinhood. A Cloudflare stock token shares the ticker. */
-export const NET_CONTRACT = "0xca9c78dd337a67f6e0077f65f5e9218719d30edf"
-export const NET_PAIR = "0x99e70a5b06215e5d2f3bec773b4f59c008fc1673"
-
 const HEX_CONTRACT = "0x2b591e99afe9f32eaa6214f7b7629768c40eeb39"
 
 export function lookupOverride(input: {
@@ -119,23 +115,6 @@ export function lookupOverride(input: {
         confidenceReason:
           "HEX after 13 May 2023 defaults to PulseChain unless the post says eHEX or ETH. Same contract, PulseX pool.",
       }
-    }
-  }
-
-  if (symbol === "NET" && (hint === "robinhood" || /\brobinhood\b/i.test(text))) {
-    return {
-      symbol: "NET",
-      assetName: "NetNet",
-      chain: "robinhood",
-      contractAddress: NET_CONTRACT,
-      pairAddress: NET_PAIR,
-      coingeckoId: null,
-      geckoterminalNetwork: "robinhood",
-      dexscreenerUrl: `https://dexscreener.com/robinhood/${NET_PAIR}`,
-      confidence: "low",
-      resolutionConfidence: "ambiguous",
-      confidenceReason:
-        "$NET on Robinhood is ambiguous: crypto NetNet (0xCA9c78Dd337A67F6e0077F65F5E9218719d30eDf) versus a Cloudflare stock token. The crypto token is preferred and marked ambiguous.",
     }
   }
 

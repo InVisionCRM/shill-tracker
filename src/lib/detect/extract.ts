@@ -1,4 +1,4 @@
-import { CASHTAG_DENY, NAME_TO_SYMBOL, canonicalBySymbol } from "./assets"
+import { CASHTAG_DENY, NAME_TO_SYMBOL } from "./assets"
 import { chainFromPrefix, contextFromText, isPersonDescriptor, nameIsTickerContext, HASHTAG_DENY } from "./context"
 import type { CallKind } from "./kinds"
 import { lookupOverride } from "./overrides"
@@ -180,7 +180,7 @@ export type IdentifiedMatch = RawMatch & {
   confidence: "high" | "medium" | "low"
   confidenceReason: string
   resolutionConfidence?: "high" | "medium" | "low" | "ambiguous"
-  resolutionStatus: "pending" | "resolved"
+  resolutionStatus: "pending" | "resolved" | "rejected"
   callKind?: CallKind
   callReason?: string
 }
@@ -204,6 +204,9 @@ export function identifyFast(
     chainBias,
   })
   if (override) {
+    // PulseChain tickers only: a curated match that lands on another chain (old Ethereum HEX) is
+    // rejected on the spot instead of being scored or priced.
+    const onPulseChain = override.chain === "pulsechain"
     return {
       ...match,
       symbol: override.symbol,
@@ -217,8 +220,10 @@ export function identifyFast(
       dexscreenerUrl: override.dexscreenerUrl,
       confidence: override.confidence,
       resolutionConfidence: override.resolutionConfidence,
-      confidenceReason: override.confidenceReason,
-      resolutionStatus: "resolved",
+      confidenceReason: onPulseChain
+        ? override.confidenceReason
+        : `${override.confidenceReason} Not on PulseChain, so this call is rejected and never scored.`,
+      resolutionStatus: onPulseChain ? "resolved" : "rejected",
     }
   }
 
@@ -244,22 +249,6 @@ export function identifyFast(
   }
 
   if (match.symbol) {
-    const known = canonicalBySymbol(match.symbol)
-    if (known) {
-      return {
-        ...match,
-        symbol: known.symbol,
-        assetName: known.name,
-        coingeckoId: known.id,
-        binanceSymbol: known.binance,
-        confidence: "high",
-        confidenceReason:
-          match.matchType === "name"
-            ? `Coin name “${match.rawText}” maps to the canonical ${known.symbol} asset.`
-            : `$${known.symbol} is on the canonical large-cap map.`,
-        resolutionStatus: "resolved",
-      }
-    }
     return {
       ...match,
       assetName: null,
@@ -270,7 +259,7 @@ export function identifyFast(
       confidenceReason:
         match.matchType === "hashtag"
           ? `#${match.symbol} is a candidate ticker. It counts only if it resolves to a known or listed asset.`
-          : `$${match.symbol} is not on the canonical map. Waiting on CoinGecko market cap or DexScreener liquidity to pick an asset.`,
+          : `$${match.symbol} is waiting on a PulseChain listing. Off-chain tickers never resolve.`,
       resolutionStatus: "pending",
     }
   }

@@ -150,22 +150,23 @@ describe("audit fixtures", () => {
     expect(matches.find((match) => match.symbol === "PTGC")?.resolutionStatus).toBe("pending")
   })
 
-  it("prices 2021 HEX on Ethereum", () => {
+  it("identifies 2021 HEX as Ethereum, then rejects it (PulseChain tickers only: Ethereum HEX never scores)", () => {
     const matches = identified(POSTS.hex2021.text, POSTS.hex2021.at, null)
     const hex = matches.find((match) => match.symbol === "HEX")
     expect(hex?.chain).toBe("ethereum")
     expect(hex?.coingeckoId).toBe("hex")
     expect(hex?.contractAddress).toBe("0x2b591e99afe9f32eaa6214f7b7629768c40eeb39")
     expect(hex?.callKind).toBe("call")
+    expect(hex?.resolutionStatus).toBe("rejected")
+    expect(countsTowardScore(hex!)).toBe(false)
     expect(classifyPost(POSTS.hex2021.text).kind).toBe("call")
   })
 
-  it("marks Robinhood $NET ambiguous and prefers the crypto token", () => {
+  it("no longer curates Robinhood $NET: it is just a pending cashtag, same as any other", () => {
     const [match] = identified("$NET on robinhood", Date.parse("2026-01-01T00:00:00Z"), null)
-    expect(match.chain).toBe("robinhood")
-    expect(match.contractAddress).toBe("0xca9c78dd337a67f6e0077f65f5e9218719d30edf")
-    expect(match.resolutionConfidence).toBe("ambiguous")
-    expect(match.confidence).toBe("low")
+    expect(match.chain).toBeNull()
+    expect(match.contractAddress).toBeNull()
+    expect(match.resolutionStatus).toBe("pending")
   })
 })
 

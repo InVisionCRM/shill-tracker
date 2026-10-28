@@ -51,7 +51,6 @@ export const HASHTAG_DENY = new Set([
   "GIVEAWAY",
   "BLOCKCHAIN",
   "BINANCE",
-  "ROBINHOOD",
   "TRADING",
   "TRADER",
   "FINANCE",
@@ -87,8 +86,6 @@ const CHAIN_PREFIX: Record<string, string> = {
   pulse: "pulsechain",
   pulsechain: "pulsechain",
   pls: "pulsechain",
-  robinhood: "robinhood",
-  rh: "robinhood",
 }
 
 export function chainFromPrefix(prefix: string) {
@@ -119,13 +116,11 @@ export type PostContext = {
 
 export function contextFromText(text: string): PostContext {
   const rules: Array<[RegExp, string]> = [
-    [/robinhood\s*:/i, "robinhood"],
     [/#pulsechain\b|#pulse\b|\bon\s+pulse(chain)?\b|scan\.pulsechain\.com|dexscreener\.com\/pulsechain|geckoterminal\.com\/pulsechain|pulsex\.(com|finance)/i, "pulsechain"],
     [/#base\b|\bon\s+base\b|basescan\.org|dexscreener\.com\/base|geckoterminal\.com\/base/i, "base"],
     [/#solana\b|\bon\s+sol(ana)?\b|solscan\.io|dexscreener\.com\/solana/i, "solana"],
     [/#bsc\b|\bon\s+bsc\b|bscscan\.com|dexscreener\.com\/bsc/i, "bsc"],
     [/#ethereum\b|\bon\s+eth(ereum)?\b|etherscan\.io|dexscreener\.com\/ethereum/i, "ethereum"],
-    [/\brobinhood\b/i, "robinhood"],
   ]
   let chainHint: string | null = null
   for (const [pattern, chain] of rules) {

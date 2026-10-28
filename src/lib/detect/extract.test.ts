@@ -65,13 +65,13 @@ describe("extractMatches", () => {
 })
 
 describe("collapseMatches", () => {
-  it("merges a cashtag and a coin name for the same asset", () => {
+  it("merges a cashtag and a coin name for the same asset, and leaves it pending (PulseChain tickers only)", () => {
     const matches = extractMatches("bitcoin and $BTC, same trade").map(identifyFast)
     const collapsed = collapseMatches(matches)
     expect(collapsed).toHaveLength(1)
-    expect(collapsed[0].coingeckoId).toBe("bitcoin")
+    expect(collapsed[0].coingeckoId).toBeNull()
     expect(collapsed[0].symbol).toBe("BTC")
-    expect(collapsed[0].confidence).toBe("high")
+    expect(collapsed[0].resolutionStatus).toBe("pending")
   })
 
   it("keeps the contract when a cashtag repeats it", () => {
