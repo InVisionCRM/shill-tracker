@@ -64,6 +64,13 @@
       "when": 1793270000000,
       "tag": "0008_reject_pending_offchain",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793280000000,
+      "tag": "0009_pulsechain_voices_only",
+      "breakpoints": true
     }
   ]
 }
