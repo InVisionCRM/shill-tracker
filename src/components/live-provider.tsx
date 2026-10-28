@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { useHydrated } from "@/lib/client-hooks"
 import type { FeedDTO, PricingProgress, QuoteDTO } from "@/lib/types"
 
 type LiveState = {
@@ -87,8 +88,23 @@ export function LiveProvider({
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>
 }
 
+const SERVER_STATE: LiveState = {
+  quotes: [],
+  latest: [],
+  prices: {},
+  progress: null,
+  connected: false,
+  updatedAt: null,
+}
+
+/**
+ * Live values only after this component has hydrated. A Suspense boundary that streams in late would
+ * otherwise hydrate against quotes fetched after the server rendered it (React #418, seen under load).
+ */
 export function useLive() {
-  return useContext(LiveContext)
+  const live = useContext(LiveContext)
+  const hydrated = useHydrated()
+  return hydrated ? live : SERVER_STATE
 }
 
 export function useMarkPrice(assetKey: string | null, fallback: number | null, pinned: boolean) {

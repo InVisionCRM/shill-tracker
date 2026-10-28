@@ -1,6 +1,6 @@
 "use client"
 
-import { useReducedMotion } from "motion/react"
+import { useReducedMotion } from "@/lib/client-hooks"
 
 export function OutcomeFlare({ roi }: { roi: number | null }) {
   const reduce = useReducedMotion()

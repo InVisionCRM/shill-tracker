@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { useReducedMotion } from "motion/react"
+import { useReducedMotion } from "@/lib/client-hooks"
 import { formatCompact, formatRoi, formatUsd, roiClass, dumpTone, scoreTone } from "@/lib/format"
 import type { LeaderRow, ScoreSnapshot } from "@/lib/types"
 import { Input } from "@/components/ui/input"

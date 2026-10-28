@@ -1,13 +1,14 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { useInView, useMotionValue, useReducedMotion, useSpring } from "motion/react"
 import { cn } from "cn"
+import { useReducedMotion } from "@/lib/client-hooks"
+
+const FORMAT = new Intl.NumberFormat("en-US")
 
 /**
- * Magic UI Number Ticker, adapted to `motion/react`.
- * The accessible name is the final value. The visible digits count up
- * unless the visitor asked for reduced motion.
+ * Number ticker without an animation library. Server HTML shows the real value; once in view it counts up
+ * with requestAnimationFrame by writing textContent (no React re-renders), unless reduced motion is on.
  */
 export function NumberTicker({
   value,
@@ -20,26 +21,38 @@ export function NumberTicker({
 }) {
   const ref = useRef<HTMLSpanElement>(null)
   const reduce = useReducedMotion()
-  const formatted = new Intl.NumberFormat("en-US").format(Math.round(value))
-  // Server HTML and no-JS visitors see the real value. The count-up only starts once in view.
-  const motionValue = useMotionValue(0)
-  const spring = useSpring(motionValue, { damping: 40, stiffness: 140 })
-  const inView = useInView(ref, { once: true, margin: "0px" })
+  const formatted = FORMAT.format(Math.round(value))
 
   useEffect(() => {
-    if (reduce || !inView) return
-    motionValue.jump(0)
-    const timer = window.setTimeout(() => motionValue.set(value), delay * 1000)
-    return () => window.clearTimeout(timer)
-  }, [reduce, inView, motionValue, value, delay])
-
-  useEffect(() => {
-    if (reduce) return
-    return spring.on("change", (latest) => {
-      if (!ref.current) return
-      ref.current.textContent = new Intl.NumberFormat("en-US").format(Math.round(latest))
-    })
-  }, [reduce, spring])
+    const node = ref.current
+    if (reduce || !node || typeof IntersectionObserver === "undefined") return
+    let frame = 0
+    let timer = 0
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        observer.disconnect()
+        timer = window.setTimeout(() => {
+          const start = performance.now()
+          const tick = (now: number) => {
+            const t = Math.min(1, (now - start) / 900)
+            const eased = 1 - (1 - t) ** 3
+            node.textContent = FORMAT.format(Math.round(value * eased))
+            if (t < 1) frame = requestAnimationFrame(tick)
+          }
+          frame = requestAnimationFrame(tick)
+        }, delay * 1000)
+      },
+      { threshold: 0.1 },
+    )
+    observer.observe(node)
+    return () => {
+      observer.disconnect()
+      window.clearTimeout(timer)
+      cancelAnimationFrame(frame)
+      node.textContent = FORMAT.format(Math.round(value))
+    }
+  }, [reduce, value, delay])
 
   return (
     <span
