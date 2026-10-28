@@ -5,15 +5,9 @@ import { callRankWindow, firstMentionIds, repeatCountFor } from "./scoring/call-
 import { downsample, type Candle } from "./scoring/evaluate"
 import type { PositionDTO, PricingProgress } from "./types"
 
+/** PulseChain tickers only. Shown only when the feed has no calls yet to build the tape from. */
 const PRICED_MARKETS: { symbol: string; chain: string | null; imageUrl: string | null }[] = [
-  { symbol: "BTC", chain: null, imageUrl: null },
-  { symbol: "ETH", chain: null, imageUrl: null },
-  { symbol: "SOL", chain: null, imageUrl: null },
   { symbol: "HEX", chain: "pulsechain", imageUrl: null },
-  { symbol: "PEPE", chain: null, imageUrl: null },
-  { symbol: "DOGE", chain: null, imageUrl: null },
-  { symbol: "BONK", chain: null, imageUrl: null },
-  { symbol: "WIF", chain: null, imageUrl: null },
 ]
 
 export async function getTapeLogos() {
@@ -29,6 +23,7 @@ export async function getTapeLogos() {
       from mentions m
       left join pulse_tokens t on upper(t.symbol) = upper(m.symbol)
       where m.symbol is not null and char_length(m.symbol) between 2 and 12
+        and m.resolution_status <> 'rejected'
       group by 1, 2
     ) logos
     order by seen desc
@@ -219,8 +214,9 @@ export async function getInfluencer(username: string) {
   const stats = rows[0].influencer_stats
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { series: _series, ...mentionCols } = getTableColumns(mentions)
-  // First call per asset only: repeats are never listed or scored.
-  const isFirst = sql`${mentions.id} in (${firstMentionIds})`
+  // First call per asset only: repeats are never listed or scored. PulseChain tickers only: a call
+  // rejected for resolving off PulseChain is never listed either.
+  const isFirst = sql`${mentions.id} in (${firstMentionIds}) and ${mentions.resolutionStatus} <> 'rejected'`
   const [mentionCount] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(mentions)
@@ -239,7 +235,7 @@ export async function getInfluencer(username: string) {
     mentionRows.push(...extra)
   }
   // Archive: only posts that carry at least one first call. A post that only repeats tickers is skipped.
-  const hasFirst = sql`exists (select 1 from mentions pm where pm.post_id = ${posts.id} and pm.id in (${firstMentionIds}))`
+  const hasFirst = sql`exists (select 1 from mentions pm where pm.post_id = ${posts.id} and pm.id in (${firstMentionIds}) and pm.resolution_status <> 'rejected')`
   const [postCount] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(posts)
@@ -379,7 +375,8 @@ export async function getMention(id: string) {
     .from(mentions)
     .innerJoin(posts, eq(posts.id, mentions.postId))
     .innerJoin(influencers, eq(influencers.id, mentions.influencerId))
-    .where(eq(mentions.id, id))
+    // PulseChain tickers only: a call rejected for resolving off PulseChain is gone from the app.
+    .where(and(eq(mentions.id, id), sql`${mentions.resolutionStatus} <> 'rejected'`))
     .limit(1)
   if (!rows[0]) return null
   const series = downsample((rows[0].mentions.series ?? []) as Candle[], 240)
@@ -399,7 +396,7 @@ export async function getTicker(symbol: string) {
     .from(mentions)
     .innerJoin(influencers, eq(influencers.id, mentions.influencerId))
     .innerJoin(posts, eq(posts.id, mentions.postId))
-    .where(and(match, sql`${mentions.id} in (${firstMentionIds})`))
+    .where(and(match, sql`${mentions.id} in (${firstMentionIds})`, sql`${mentions.resolutionStatus} <> 'rejected'`))
     .orderBy(desc(mentions.createdAt))
     .limit(40)
   const [count] = await db
@@ -408,7 +405,7 @@ export async function getTicker(symbol: string) {
       avg: sql<number | null>`avg(${mentions.roi7d}) filter (where ${mentions.callKind} = 'call' and ${mentions.priceStatus} is distinct from 'unverifiable')::float8`,
     })
     .from(mentions)
-    .where(and(match, sql`${mentions.id} in (${firstMentionIds})`))
+    .where(and(match, sql`${mentions.id} in (${firstMentionIds})`, sql`${mentions.resolutionStatus} <> 'rejected'`))
   const firstResult = await db.execute(sql`
     select
       m.id,
@@ -555,8 +552,9 @@ export async function getFeed(limit = 40) {
     .innerJoin(posts, eq(posts.id, mentions.postId))
     .innerJoin(influencers, eq(influencers.id, mentions.influencerId))
     .leftJoin(pulseTokens, sql`lower(${mentions.contractAddress}) = ${pulseTokens.address}`)
-    // One row per (voice, asset): the first call. Repeats never reach the feed.
-    .where(sql`${mentions.id} in (${firstMentionIds})`)
+    // One row per (voice, asset): the first call. Repeats never reach the feed. PulseChain tickers
+    // only: a call resolved off PulseChain is rejected and never reaches the feed either.
+    .where(and(sql`${mentions.id} in (${firstMentionIds})`, sql`${mentions.resolutionStatus} <> 'rejected'`))
     .orderBy(desc(mentions.createdAt))
     .limit(limit)
 }
@@ -591,6 +589,7 @@ export async function searchAll(query: string) {
     .where(
       and(
         sql`${mentions.id} in (${firstMentionIds})`,
+        sql`${mentions.resolutionStatus} <> 'rejected'`,
         or(
           ilike(mentions.symbol, `%${q}%`),
           ilike(mentions.assetName, `%${q}%`),
