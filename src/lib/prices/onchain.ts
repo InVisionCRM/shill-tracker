@@ -60,7 +60,6 @@ export function onchainCallCount() {
   return rpcCalls
 }
 
-/** JSON-RPC batch with backoff on 429 and 5xx. Archive misses come back as null, never as a guess. */
 /**
  * Batched JSON-RPC. Archive eth_calls are slow on the public node, so state reads go in small batches
  * a few at a time; items that come back with a per-item error (rate limit, timeout) are retried.
@@ -96,6 +95,9 @@ export async function rpcBatch<T = unknown>(calls: Call[], chunk?: number): Prom
     pending = failed
     if (pending.length) await new Promise((resolve) => setTimeout(resolve, 500 * (round + 1)))
   }
+  // Items still failing with a transient error must not look like a genuine null (no pair, revert):
+  // throw so the caller leaves the row pending instead of marking it unverifiable.
+  if (pending.length) throw new Error(`PulseChain RPC timed out or rate limited on ${pending.length} call(s)`)
   return out
 }
 
