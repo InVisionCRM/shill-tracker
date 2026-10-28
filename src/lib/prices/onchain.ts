@@ -61,50 +61,89 @@ export function onchainCallCount() {
 }
 
 /** JSON-RPC batch with backoff on 429 and 5xx. Archive misses come back as null, never as a guess. */
-export async function rpcBatch<T = unknown>(calls: Call[], chunk = 40): Promise<(T | null)[]> {
-  const out: (T | null)[] = []
-  for (let start = 0; start < calls.length; start += chunk) {
-    const slice = calls.slice(start, start + chunk)
-    const body = slice.map((call, index) => ({ jsonrpc: "2.0", id: index, method: call.method, params: call.params }))
-    type Reply = { id: number; result?: T; error?: { message?: string } }
-    let parsed: Reply[] | null = null
-    let lastError = ""
-    for (let attempt = 0; attempt < 4 && !parsed; attempt += 1) {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 15_000)
-      try {
-        rpcCalls += 1
-        const response = await fetch(RPC_URL, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        })
-        if (response.status === 429 || response.status >= 500) {
-          lastError = `${response.status} from pulsechain rpc`
-          await new Promise((resolve) => setTimeout(resolve, 600 * 2 ** attempt))
-          continue
+/**
+ * Batched JSON-RPC. Archive eth_calls are slow on the public node, so state reads go in small batches
+ * a few at a time; items that come back with a per-item error (rate limit, timeout) are retried.
+ */
+export async function rpcBatch<T = unknown>(calls: Call[], chunk?: number): Promise<(T | null)[]> {
+  const size = chunk ?? (calls.some((call) => call.method === "eth_call") ? 8 : 40)
+  const out: (T | null)[] = new Array(calls.length).fill(null)
+  let pending = calls.map((_, index) => index)
+  for (let round = 0; round < 3 && pending.length; round += 1) {
+    const slices: number[][] = []
+    for (let start = 0; start < pending.length; start += size) slices.push(pending.slice(start, start + size))
+    const failed: number[] = []
+    let fatal: Error | null = null
+    const queue = [...slices]
+    await Promise.all(
+      Array.from({ length: Math.min(RPC_CONCURRENCY, queue.length) }, async () => {
+        while (queue.length) {
+          const slice = queue.shift()!
+          try {
+            const replies = await rpcPost<T>(slice.map((index) => calls[index]))
+            replies.forEach((reply, offset) => {
+              if (reply.ok) out[slice[offset]] = reply.value
+              else if (reply.retry) failed.push(slice[offset])
+            })
+          } catch (error) {
+            fatal = error instanceof Error ? error : new Error(String(error))
+            failed.push(...slice)
+          }
         }
-        if (!response.ok) throw new Error(`${response.status} from pulsechain rpc`)
-        const json = (await response.json()) as Reply[] | { error?: { message?: string } }
-        if (!Array.isArray(json)) throw new Error(`pulsechain rpc: ${json?.error?.message ?? "bad batch reply"}`)
-        parsed = json
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error)
-        if (attempt === 3) break
-        await new Promise((resolve) => setTimeout(resolve, 600 * 2 ** attempt))
-      } finally {
-        clearTimeout(timer)
-      }
-    }
-    if (!parsed) throw new Error(lastError || "pulsechain rpc failed")
-    const byId = new Map(parsed.map((row) => [row.id, row]))
-    for (let index = 0; index < slice.length; index += 1) {
-      const row = byId.get(index)
-      out.push(row && !row.error && row.result != null ? (row.result as T) : null)
-    }
+      }),
+    )
+    if (failed.length === pending.length && fatal) throw fatal
+    pending = failed
+    if (pending.length) await new Promise((resolve) => setTimeout(resolve, 500 * (round + 1)))
   }
   return out
+}
+
+const RPC_CONCURRENCY = 4
+
+type RpcReply<T> = { ok: true; value: T } | { ok: false; retry: boolean }
+
+async function rpcPost<T>(slice: Call[]): Promise<RpcReply<T>[]> {
+  const body = slice.map((call, index) => ({ jsonrpc: "2.0", id: index, method: call.method, params: call.params }))
+  type Reply = { id: number; result?: T; error?: { message?: string; code?: number } }
+  let lastError = ""
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 20_000)
+    try {
+      rpcCalls += 1
+      const response = await fetch(RPC_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+      if (response.status === 429 || response.status >= 500) {
+        lastError = `${response.status} from pulsechain rpc`
+        await new Promise((resolve) => setTimeout(resolve, 600 * 2 ** attempt))
+        continue
+      }
+      if (!response.ok) throw new Error(`${response.status} from pulsechain rpc`)
+      const json = (await response.json()) as Reply[] | { error?: { message?: string } }
+      if (!Array.isArray(json)) throw new Error(`pulsechain rpc: ${json?.error?.message ?? "bad batch reply"}`)
+      const byId = new Map(json.map((row) => [row.id, row]))
+      return slice.map((_, index) => {
+        const row = byId.get(index)
+        if (row && !row.error && row.result != null) return { ok: true as const, value: row.result as T }
+        // A revert (pair not deployed yet at that block) is a real answer; limits and timeouts are not.
+        const message = row?.error?.message ?? ""
+        const retry = !row || /limit|timeout|timed out|busy|too many|try again|header not found/i.test(message)
+        return { ok: false as const, retry }
+      })
+    } catch (error) {
+      lastError = error instanceof Error ? `pulsechain rpc ${error.message}` : String(error)
+      if (attempt === 2) break
+      await new Promise((resolve) => setTimeout(resolve, 600 * 2 ** attempt))
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  throw new Error(lastError || "pulsechain rpc failed")
 }
 
 function hex(value: number) {
