@@ -109,13 +109,17 @@ export async function fetchHistory(
   } else if (network && target.pairAddress && olderThanGt) {
     errors.push("GeckoTerminal free OHLCV does not cover this date")
   }
-  if (pulseUnverifiable || olderThanGt || olderThanCg) {
+  // A rate limit or timeout means we do not know yet; only a clean "no source covers this" is unverifiable.
+  const transient = errors.some((message) => TRANSIENT.test(message))
+  if (!transient && (pulseUnverifiable || olderThanGt || olderThanCg)) {
     throw new UnverifiablePriceError(
       errors.join(" | ") || "No free history covers this date, and on-chain reserves were not available. Not estimated.",
     )
   }
   throw new Error(errors.join(" | ") || "no price source for this asset")
 }
+
+const TRANSIENT = /\b429\b|cooldown|abort|timeout|timed out|\b5\d\d\b/i
 
 async function binanceKlines(symbol: string, fromMs: number, toMs: number) {
   const candles: Candle[] = []

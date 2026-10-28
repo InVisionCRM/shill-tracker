@@ -92,6 +92,14 @@ export async function runPriceJob(options?: {
     const work = async () => {
     let mark = Date.now()
     if (!inline) {
+      // Repair: rate limits once got recorded as "unverifiable". Those rows go back in the queue.
+      await db.execute(sql`
+        update mentions
+        set price_status = 'pending', price_error = null, updated_at = now()
+        where price_status = 'unverifiable'
+          and price_at is null
+          and price_error ~* '(429 |429$|cooldown|abort|timeout|timed out)'
+      `)
       const pulseResolved = await applyPulseBias()
       detail.resolved = pulseResolved
     }
