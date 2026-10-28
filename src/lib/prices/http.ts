@@ -80,3 +80,8 @@ export function coingeckoConfig() {
     minIntervalMs: 1600,
   }
 }
+
+/** True while a host is in its 429 cooldown. */
+export function hostResting(host: string) {
+  return (cooldownUntil.get(host) ?? 0) > Date.now()
+}

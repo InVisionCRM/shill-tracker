@@ -1,6 +1,14 @@
 import type { Candle } from "../scoring/evaluate"
 
-const RPC_URL = process.env.PULSECHAIN_RPC_URL || "https://rpc.pulsechain.com"
+/**
+ * Full-history PulseChain nodes, tried in order. rpc-pulsechain.g4mm4.io serves old blocks and is the
+ * node PulseChainAI.com uses; rpc.pulsechain.com may be retired (adapted from PulseChainAI.com, GPL-3.0).
+ */
+const RPC_URLS = [
+  ...(process.env.PULSECHAIN_RPC_URL ? [process.env.PULSECHAIN_RPC_URL] : []),
+  "https://rpc-pulsechain.g4mm4.io",
+  "https://rpc.pulsechain.com",
+]
 
 /** Block 17,300,000. Used to estimate a block from a timestamp, then checked on chain. */
 const ANCHOR_BLOCK = 17_300_000
@@ -294,11 +302,21 @@ function hex(value: number) {
 }
 
 async function rpc<T>(method: string, params: unknown[]): Promise<T | null> {
-  const response = await fetch(RPC_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-  })
+  let response: Response | null = null
+  for (const url of RPC_URLS) {
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        signal: AbortSignal.timeout(15_000),
+      })
+      if (response.ok) break
+    } catch {
+      response = null
+    }
+  }
+  if (!response) throw new Error("pulsechain rpc unreachable")
   if (!response.ok) {
     throw new Error(`${response.status} from pulsechain rpc`)
   }

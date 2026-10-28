@@ -149,6 +149,40 @@ export function priceAtDetail(candles: Candle[], time: number): { p: number; t: 
   return { p: candles[found].p, t: candles[found].t }
 }
 
+/**
+ * Entry price at the post time. Candles carry their close, so the open of the candle that contains the
+ * post is the previous candle's close. A post in the last sixth of its candle takes that candle's close.
+ * Exact means minute-level data; hourly candles are nearest_candle and daily ones nearest_daily_close.
+ */
+export function entryAtDetail(candles: Candle[], time: number): { p: number; t: number; m: PriceMatch } | null {
+  if (!candles.length) return null
+  let low = 0
+  let high = candles.length - 1
+  let found = -1
+  while (low <= high) {
+    const mid = (low + high) >> 1
+    if (candles[mid].t <= time) {
+      found = mid
+      low = mid + 1
+    } else {
+      high = mid - 1
+    }
+  }
+  if (found < 0) return null
+  const containing = candles[found]
+  const next = candles[found + 1]
+  const prev = candles[found - 1]
+  const spacing = next ? next.t - containing.t : prev ? containing.t - prev.t : null
+  if (spacing == null || spacing <= 0) return null
+  const offset = time - containing.t
+  // A gap: no candle we have contains the post.
+  if (offset >= spacing) return null
+  const m: PriceMatch = spacing <= 2 * 60 * 1000 ? "exact" : spacing < 12 * 60 * 60 * 1000 ? "nearest_candle" : "nearest_daily_close"
+  if (offset >= (spacing * 5) / 6) return { p: containing.p, t: containing.t + spacing, m }
+  if (!prev || containing.t - prev.t > spacing * 1.5) return null
+  return { p: prev.p, t: containing.t, m }
+}
+
 function roi(entry: number | null, exit: number | null) {
   if (entry == null || exit == null || entry === 0) return null
   return exit / entry - 1
@@ -283,7 +317,9 @@ export function evaluateCall(input: {
     priceMatches[slot] = { m: matchTypeFor(time - hit.t), ts: hit.t }
     return hit.p
   }
-  const entry = detail("at", postedAt)
+  const entryHit = entryAtDetail(candles, postedAt)
+  if (entryHit) priceMatches.at = { m: entryHit.m, ts: entryHit.t }
+  const entry = entryHit?.p ?? null
 
   const due = (ms: number) => now >= postedAt + ms
   const at = (slot: MatchSlot, ms: number) => (due(ms) ? detail(slot, postedAt + ms) : null)

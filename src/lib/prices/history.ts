@@ -96,7 +96,7 @@ export async function fetchHistory(
   if (network && target.pairAddress && !olderThanGt) {
     try {
       return {
-        candles: await geckoTerminalOhlcv(network, target.pairAddress, fromMs, toMs),
+        candles: await geckoTerminalOhlcv(network, target.pairAddress, fromMs, toMs, target.contractAddress ?? null),
         source: "geckoterminal",
       }
     } catch (error) {
@@ -170,12 +170,12 @@ type GtResponse = {
   data?: { attributes?: { ohlcv_list?: number[][] } }
 }
 
-async function geckoTerminalOhlcv(network: string, pool: string, fromMs: number, toMs: number) {
+async function geckoTerminalOhlcv(network: string, pool: string, fromMs: number, toMs: number, token: string | null) {
   const poolId = pool.startsWith("0x") || pool.startsWith("0X") ? pool.toLowerCase() : pool
   const candles: Candle[] = []
   let before = Math.floor(toMs / 1000) + 3600
   for (let page = 0; page < 4; page += 1) {
-    const url = `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${poolId}/ohlcv/hour?aggregate=1&limit=1000&currency=usd&before_timestamp=${before}`
+    const url = `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${poolId}/ohlcv/hour?aggregate=1&limit=1000&currency=usd&before_timestamp=${before}${token ? `&token=${encodeURIComponent(token)}` : ""}`
     const body = await fetchJson<GtResponse>(url, {
       headers: { accept: "application/json;version=20230302" },
       minIntervalMs: 2100,
@@ -262,4 +262,73 @@ export async function fetchDexTokenPrices(addresses: string[]) {
     })
   }
   return [...best.values()]
+}
+
+/** DexScreener chain ids for our canonical chain names (same strings except where noted). */
+const DEX_CHAIN: Record<string, string> = { "binance-smart-chain": "bsc", bnb: "bsc", avalanche: "avalanche", polygon: "polygon" }
+export function dexChainId(chain: string | null) {
+  if (!chain || chain === "unknown-evm") return null
+  return DEX_CHAIN[chain] ?? chain
+}
+
+/**
+ * Free, keyless DexScreener token endpoint: GET /tokens/v1/{chainId}/{a,b,...}, at most 30 addresses.
+ * Picks the most liquid pair per token on that chain only, prices quote-side hits as priceUsd / priceNative,
+ * and skips pools under $100 of liquidity. Adapted from PulseChainAI.com (GPL-3.0), lib/portfolio/dexPrices.ts.
+ */
+export async function fetchDexTokensOnChain(chainId: string, addresses: string[]) {
+  const best = new Map<string, { price: number; liquidity: number; pair: string | null }>()
+  if (!addresses.length) return best
+  if (addresses.length > 30) throw new Error("DexScreener tokens/v1 takes at most 30 addresses")
+  const url = `https://api.dexscreener.com/tokens/v1/${encodeURIComponent(chainId)}/${addresses.map(encodeURIComponent).join(",")}`
+  type Pair = {
+    chainId?: string
+    pairAddress?: string
+    baseToken?: { address?: string }
+    quoteToken?: { address?: string }
+    priceUsd?: string
+    priceNative?: string
+    liquidity?: { usd?: number }
+  }
+  const pairs = await fetchJson<Pair[]>(
+    url,
+    // About 300 requests a minute on this endpoint; stay well under it.
+    { minIntervalMs: 250, timeoutMs: 12_000 },
+  )
+  const norm = (address: string) => (address.startsWith("0x") ? address.toLowerCase() : address)
+  const wanted = new Set(addresses.map(norm))
+  for (const pair of Array.isArray(pairs) ? pairs : []) {
+    if (pair.chainId !== chainId) continue
+    const liquidity = Number(pair.liquidity?.usd) || 0
+    if (liquidity < 100) continue
+    const baseUsd = Number(pair.priceUsd)
+    const native = Number(pair.priceNative)
+    const sides: [string | undefined, number][] = [
+      [pair.baseToken?.address, baseUsd],
+      [pair.quoteToken?.address, Number.isFinite(native) && native > 0 ? baseUsd / native : Number.NaN],
+    ]
+    for (const [raw, price] of sides) {
+      if (!raw || !Number.isFinite(price) || !(price > 0)) continue
+      const key = norm(raw)
+      if (!wanted.has(key)) continue
+      const current = best.get(key)
+      if (current && current.liquidity >= liquidity) continue
+      best.set(key, { price, liquidity, pair: pair.pairAddress ?? null })
+    }
+  }
+  return best
+}
+
+/** Binance 1m kline that contains `postedAt` (free, keyless): its open, or its close at the end of the minute. */
+export async function binanceEntry(symbol: string, postedAt: number) {
+  const minute = Math.floor(postedAt / 60_000) * 60_000
+  const rows = await binanceGet<unknown[][]>(
+    `/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=1m&startTime=${minute}&limit=1`,
+    100,
+    10_000,
+  )
+  const row = rows[0]
+  if (!row || Number(row[0]) !== minute) return null
+  const price = postedAt - minute >= 50_000 ? Number(row[4]) : Number(row[1])
+  return Number.isFinite(price) && price > 0 ? { price, ts: minute } : null
 }

@@ -177,7 +177,8 @@ describe("dead assets and reserve math", () => {
         postedAt,
         now: postedAt + 40 * 24 * HOUR,
         candles: [
-          { t: postedAt, p: 1, v: 0 },
+          { t: postedAt - HOUR, p: 1, v: 0 },
+          { t: postedAt, p: 1.1, v: 0 },
           { t: postedAt + HOUR, p: 1.2, v: 0 },
         ],
       }),

@@ -11,8 +11,11 @@ import { assetKeyOf } from "../format"
 import { lookupOverride } from "../detect/overrides"
 import { WEIGHTS, applyAssetState, evaluateCall } from "../scoring/evaluate"
 import { recomputeInfluencers } from "../stats"
-import { fetchHistory, fetchBinanceTickers, fetchCoingeckoSimple, fetchDexTokenPrices, isUnverifiable } from "./history"
+import { fetchHistory, fetchBinanceTickers, fetchCoingeckoSimple, isUnverifiable } from "./history"
 import { resolveContract, resolveSymbol } from "./resolve"
+import { hostResting } from "./http"
+
+const dexResting = () => hostResting("api.dexscreener.com")
 
 const HOUR = 60 * 60 * 1000
 const DAY = 24 * HOUR
@@ -52,6 +55,9 @@ export async function runPriceJob(options?: {
   mentionIds?: string[]
   budgetMs?: number
   skipQuotes?: boolean
+  /** Backlog runs (outside Vercel) resolve more groups at once and give resolution more of the pass. */
+  resolveConcurrency?: number
+  resolveShare?: number
 }) {
   const started = new Date()
   const db = getDb()
@@ -124,8 +130,9 @@ export async function runPriceJob(options?: {
             where m.pinned = false
               and m.call_kind = 'call'
               and m.resolution_status = 'pending'
-              and r.call_rank = 1
-            order by m.price_attempts asc, m.created_at asc
+            -- Every pending call resolves (grouped by token below, one lookup per group), so first-call
+            -- identity can key on chain + contract. First calls go first.
+            order by (r.call_rank = 1) desc, m.price_attempts asc, m.created_at asc
             limit ${resolveLimit}
           `),
         ).map((row) => row.id)
@@ -177,7 +184,7 @@ export async function runPriceJob(options?: {
     }
     phase("select", mark)
     mark = Date.now()
-    const resolveBudgetMs = inline ? 20_000 : Math.round(budgetMs * 0.4)
+    const resolveBudgetMs = inline ? 20_000 : Math.round(budgetMs * Math.min(Math.max(options?.resolveShare ?? 0.4, 0.1), 0.8))
     let resolvedGroups = 0
     let coingeckoLimited = false
     const resolveOne = async (group: (typeof groups extends Map<string, infer G> ? G : never)) => {
@@ -264,12 +271,13 @@ export async function runPriceJob(options?: {
     // A few groups at once; each host still keeps its own spacing and 429 cooldown in fetchJson.
     const queue = [...groups.values()]
     await Promise.all(
-      Array.from({ length: Math.min(RESOLVE_CONCURRENCY, queue.length) }, async () => {
+      Array.from({ length: Math.min(Math.max(options?.resolveConcurrency ?? RESOLVE_CONCURRENCY, 1), 8, queue.length) }, async () => {
         while (queue.length) {
           if (Date.now() - started.getTime() > resolveBudgetMs) return
           const group = queue.shift()!
-          // Symbol lookups lean on CoinGecko; once it rate-limits, leave symbol groups for the next run.
-          if (coingeckoLimited && !group.curated && !group.mentions[0].contractAddress) continue
+          // Symbol lookups lean on CoinGecko; once it rate-limits they fall back to DexScreener search
+          // inside resolveSymbol, so only stop sending symbol groups when that host is resting too.
+          if (coingeckoLimited && dexResting() && !group.curated && !group.mentions[0].contractAddress) continue
           await resolveOne(group)
         }
       }),
@@ -346,14 +354,13 @@ export async function runPriceJob(options?: {
             price24h: evaluated.price24h,
             price7d: evaluated.price7d,
             price30d: evaluated.price30d,
-            priceNow: evaluated.priceNow,
+        // price_now / roi_now belong to the per-token refresh (prices/now.ts).
             price24hBefore: evaluated.price24hBefore,
             price7dBefore: evaluated.price7dBefore,
             roi1h: evaluated.roi1h,
             roi24h: evaluated.roi24h,
             roi7d: evaluated.roi7d,
             roi30d: evaluated.roi30d,
-            roiNow: evaluated.roiNow,
             maxGain: evaluated.maxGain,
             maxDrawdown: evaluated.maxDrawdown,
             maxPriceAfter: evaluated.maxPriceAfter,
@@ -657,25 +664,8 @@ export async function refreshQuotes() {
     }
   }
 
-  if (dex.size) {
-    try {
-      const live = await fetchDexTokenPrices([...dex.keys()])
-      for (const row of live) {
-        const meta = dex.get(row.address) ?? dex.get(row.address.toLowerCase())
-        if (!meta) continue
-        prices.set(meta.assetKey, {
-          price: row.price,
-          change24h: row.change24h,
-          source: "dexscreener",
-          symbol: meta.symbol || row.symbol,
-          name: meta.name || row.name,
-        })
-      }
-    } catch {
-      // DexScreener is best-effort for the tape.
-    }
-  }
-
+  // DexScreener prices for contract tokens come from prices/now.ts (tokens/v1, chain-scoped, 30 per call).
+  void dex
   const now = new Date()
   for (const [assetKey, quote] of prices) {
     await db
@@ -702,21 +692,7 @@ export async function refreshQuotes() {
       })
   }
 
-  const keys = [...prices.keys()]
-  if (keys.length) {
-    await db.execute(sql`
-      update mentions
-      set price_now = quotes.price,
-          roi_now = quotes.price / mentions.price_at - 1,
-          updated_at = now()
-      from quotes
-      where mentions.asset_key = quotes.asset_key
-        and mentions.pinned = false
-        and mentions.price_at is not null
-        and mentions.price_at <> 0
-        and mentions.asset_key in (${sql.join(keys.map((key) => sql`${key}`), sql`, `)})
-    `)
-  }
+  // price_now on mentions has a single writer, prices/now.ts (one price per token, with the C9 guard).
   return prices.size
 }
 

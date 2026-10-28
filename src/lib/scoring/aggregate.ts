@@ -24,34 +24,48 @@ export type StatMention = {
 }
 
 /**
- * Ticker identity for "first call" grouping: cashtag first, then asset key, then the row itself.
- * Symbol first so a partly resolved ticker never splits into two first calls. Matches tickerKey() in SQL.
+ * Ticker identity for "first call" grouping: the resolved asset (chain + contract), else the cashtag
+ * without $ in upper case, else the row itself. Matches tickerKey() in SQL.
  */
 export function assetGroupKey(mention: {
   id: string
   assetKey: string | null
   symbol: string | null
 }) {
-  if (mention.symbol) return `sym:${mention.symbol.toUpperCase()}`
   if (mention.assetKey) return mention.assetKey
+  const symbol = mention.symbol?.trim().replace(/^\$+/, "")
+  if (symbol) return `sym:${symbol.toUpperCase()}`
   return mention.id
 }
 
-/** Earliest mention of each asset. Same timestamp breaks toward the smaller id. */
-export function firstCalls<T extends { id: string; assetKey: string | null; symbol: string | null; createdAt: number }>(
-  mentions: T[],
-): T[] {
+type Rankable = {
+  id: string
+  assetKey: string | null
+  symbol: string | null
+  createdAt: number
+  priceAt?: number | null
+  resolutionStatus?: string | null
+}
+
+/** Earlier wins; same timestamp prefers a priced row, then a resolved one, then the smaller id. Matches SQL. */
+function before(a: Rankable, b: Rankable) {
+  if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt
+  const pa = a.priceAt != null ? 1 : 0
+  const pb = b.priceAt != null ? 1 : 0
+  if (pa !== pb) return pa > pb
+  const ra = a.resolutionStatus === "resolved" ? 1 : 0
+  const rb = b.resolutionStatus === "resolved" ? 1 : 0
+  if (ra !== rb) return ra > rb
+  return a.id < b.id
+}
+
+/** Earliest mention of each asset. */
+export function firstCalls<T extends Rankable>(mentions: T[]): T[] {
   const best = new Map<string, T>()
   for (const mention of mentions) {
     const key = assetGroupKey(mention)
     const current = best.get(key)
-    if (
-      !current ||
-      mention.createdAt < current.createdAt ||
-      (mention.createdAt === current.createdAt && mention.id < current.id)
-    ) {
-      best.set(key, mention)
-    }
+    if (!current || before(mention, current)) best.set(key, mention)
   }
   return [...best.values()]
 }

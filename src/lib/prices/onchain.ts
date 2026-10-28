@@ -1,4 +1,5 @@
 import type { Candle } from "../scoring/evaluate"
+import { fetchJson } from "./http"
 
 /**
  * Batched on-chain pricing through the free public PulseChain RPC.
@@ -10,7 +11,15 @@ import type { Candle } from "../scoring/evaluate"
  * Every price is read from reserves at a real block. Nothing is interpolated or estimated.
  */
 
-const RPC_URL = process.env.PULSECHAIN_RPC_URL || "https://rpc.pulsechain.com"
+/**
+ * Full-history PulseChain nodes, tried in order. rpc-pulsechain.g4mm4.io serves old blocks and is the
+ * node PulseChainAI.com uses; rpc.pulsechain.com may be retired (adapted from PulseChainAI.com, GPL-3.0).
+ */
+const RPC_URLS = [
+  ...(process.env.PULSECHAIN_RPC_URL ? [process.env.PULSECHAIN_RPC_URL] : []),
+  "https://rpc-pulsechain.g4mm4.io",
+  "https://rpc.pulsechain.com",
+]
 export const FORK_BLOCK = 17_233_000
 
 export const WPLS = "0xa1077a294dde1b09bb078844df40758a5d0f9a27"
@@ -114,7 +123,7 @@ async function rpcPost<T>(slice: Call[]): Promise<RpcReply<T>[]> {
     const timer = setTimeout(() => controller.abort(), 20_000)
     try {
       rpcCalls += 1
-      const response = await fetch(RPC_URL, {
+      const response = await fetch(RPC_URLS[attempt % RPC_URLS.length], {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
@@ -216,6 +225,29 @@ export async function blocksAt(timestamps: number[]) {
     if (cached != null) result.set(ts, cached)
     return cached == null
   })
+  // Exact block from the PulseChain explorer in one call (adapted from PulseChainAI.com, GPL-3.0). The
+  // explorer is sometimes flaky, so anything it misses falls through to the RPC search below.
+  const viaExplorer: number[] = []
+  // Only for single-point lookups (the price at a post); long chart series keep the batched RPC search.
+  for (const ts of todo.length <= 3 ? todo : []) {
+    if (head && ts >= head.ts) continue
+    try {
+      const body = await fetchJson<{ status?: string; result?: { blockNumber?: string } }>(
+        `https://api.scan.pulsechain.com/api?module=block&action=getblocknobytime&timestamp=${ts}&closest=before`,
+        { minIntervalMs: 150, timeoutMs: 8_000 },
+      )
+      const block = Number(body.result?.blockNumber)
+      if (body.status === "1" && Number.isInteger(block) && block > 0) {
+        result.set(ts, block)
+        blockCache.set(ts, block)
+        blockTimeCache.set(ts, ts)
+        viaExplorer.push(ts)
+      }
+    } catch {
+      break
+    }
+  }
+  todo = todo.filter((ts) => !viaExplorer.includes(ts))
   const guesses = new Map<number, number>()
   for (const ts of todo) {
     if (head && ts >= head.ts) {

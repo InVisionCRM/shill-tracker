@@ -34,6 +34,8 @@ async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set")
   await installPool()
   const { runPriceJob } = await import("../src/lib/prices/job")
+  const { refreshNowPrices } = await import("../src/lib/prices/now")
+  const { fillEntries } = await import("../src/lib/prices/entry")
   const { getPricingProgress } = await import("../src/lib/queries")
   const { getPool } = await import("../src/lib/db")
 
@@ -46,7 +48,12 @@ async function main() {
   while (Date.now() - started < maxMinutes * 60_000) {
     pass += 1
     const remaining = maxMinutes * 60_000 - (Date.now() - started)
-    const result = (await runPriceJob({ limit: 800, budgetMs: Math.min(passBudgetMs, remaining) })) as {
+    const result = (await runPriceJob({
+      limit: 800,
+      budgetMs: Math.min(passBudgetMs, remaining),
+      resolveConcurrency: Number(process.env.RESOLVE_CONCURRENCY ?? 6),
+      resolveShare: 0.6,
+    })) as {
       resolved?: number
       priced?: number
       summary?: { attempted: number; priced: number; resolveGroups: number; resolveGroupsPending: number; unverifiable: number; errorsBySource: Record<string, number>; stoppedBy: string; durationMs: number }
@@ -59,9 +66,19 @@ async function main() {
         `attempted=${summary?.attempted ?? 0} unverifiable=${summary?.unverifiable ?? 0} groupsLeft=${summary?.resolveGroupsPending ?? 0} ` +
         `stop=${summary?.stoppedBy} ms=${summary?.durationMs} errors=${JSON.stringify(summary?.errorsBySource ?? {})} outcomes=${JSON.stringify((summary as { outcomes?: unknown } | undefined)?.outcomes ?? {})} phases=${JSON.stringify((summary as { phases?: unknown } | undefined)?.phases ?? {})} | ${line(lastProgress)}`,
     )
-    const moved = Number(result.resolved ?? 0) + Number(summary?.priced ?? 0) + Number(summary?.unverifiable ?? 0)
+    // Price at the shill from GeckoTerminal minute candles (then PulseX reserves / Binance 1m).
+    const entries = await fillEntries({ budgetMs: Number(process.env.ENTRY_BUDGET_MS ?? 120_000), limit: 400 }).catch(
+      (error: unknown) => ({ error: error instanceof Error ? error.message : "failed", priced: 0 }),
+    )
+    console.log(`entries ${JSON.stringify(entries)}`)
+    // One current price per token for every priced first call (free sources only).
+    const now = await refreshNowPrices({ budgetMs: 40_000 }).catch((error: unknown) => ({ error: error instanceof Error ? error.message : "failed" }))
+    console.log(`now-prices ${JSON.stringify(now)}`)
+    const moved = Number(entries.priced ?? 0) + Number(result.resolved ?? 0) + Number(summary?.priced ?? 0) + Number(summary?.unverifiable ?? 0)
     const idle = !summary?.attempted && !summary?.resolveGroups && !summary?.resolveGroupsPending
-    if (idle) {
+    const nowBusy = "missing" in now && now.missing > 0 && now.priced > 0
+    const entriesBusy = Number(entries.priced ?? 0) > 0
+    if (idle && !nowBusy && !entriesBusy) {
       console.log("nothing pending; done")
       break
     }

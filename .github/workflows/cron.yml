@@ -14,7 +14,7 @@ permissions: {}
 jobs:
   tick:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 4
     steps:
       - name: Price queue, and scores on the hour
         env:
@@ -31,6 +31,12 @@ jobs:
           # Vercel's login page answers 200, so require the job's JSON, not just a 2xx.
           echo "$out" | head -c 2000
           echo "$out" | grep -q '"ok":true' || { echo "price job did not return ok:true"; exit 1; }
+          # Price now for every priced first call, one quote per token.
+          now=$(curl --fail-with-body -sS --max-time 58 -X POST \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${base}/api/cron/now-prices")
+          echo "$now" | head -c 1000
+          echo "$now" | grep -q '"ok":true' || { echo "now-price refresh did not return ok:true"; exit 1; }
           # Even 30-minute buckets of the Unix epoch are the :00 UTC hour.
           # A manual run always refreshes scores. Half-hour schedule ticks do not.
           bucket=$(( $(date -u +%s) / 1800 ))

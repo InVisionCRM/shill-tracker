@@ -215,14 +215,35 @@ export async function resolveSymbol(symbol: string, hintedChain?: string | null)
   if (hint === "pulsechain") {
     const local = await resolveFromDirectory(symbol)
     if (local) return local
+    // PulseChain explorer token search: the most-held token with this exact symbol, which weeds out
+    // copycats (PLSX has ~232k holders, its copies a few hundred). Adapted from PulseChainAI.com (GPL-3.0).
+    const held = await mostHeldPulseToken(symbol).catch(() => null)
+    if (held) {
+      const byContract = await resolveContract(held, "pulsechain").catch(() => null)
+      if (byContract && byContract.resolutionStatus === "resolved" && byContract.chain && canonicalChain(byContract.chain) === "pulsechain") {
+        return byContract
+      }
+    }
+    // Then DexScreener search, preferring the most liquid PulseChain pair for this symbol.
+    const dex = await searchDex(symbol, "pulsechain").catch(() => null)
+    if (dex && dex.chain && canonicalChain(dex.chain) === "pulsechain") return dex
   }
   const cg = coingeckoConfig()
-  const search = await cached(`cg-search:${symbol}`, 12 * 60 * 60 * 1000, () =>
-    fetchJson<CgSearch>(`${cg.base}/search?query=${encodeURIComponent(symbol)}`, {
-      headers: cg.headers,
-      minIntervalMs: cg.minIntervalMs,
-    }),
-  )
+  let search: CgSearch
+  try {
+    search = await cached(`cg-search:${symbol}`, 12 * 60 * 60 * 1000, () =>
+      fetchJson<CgSearch>(`${cg.base}/search?query=${encodeURIComponent(symbol)}`, {
+        headers: cg.headers,
+        minIntervalMs: cg.minIntervalMs,
+      }),
+    )
+  } catch (error) {
+    // Keyless CoinGecko rate limits hard. DexScreener search is free and keyless; use its liquid pair,
+    // and keep the CoinGecko error (transient, retried later) when there is none.
+    const dex = await searchDex(symbol, hintedChain).catch(() => null)
+    if (dex) return dex
+    throw error
+  }
   const coins = (search.coins ?? [])
     .filter((coin) => coin.symbol?.toUpperCase() === symbol.toUpperCase())
     .slice(0, 8)
@@ -432,6 +453,23 @@ function networkFromPoolId(id: string) {
   const marker = id.toLowerCase().lastIndexOf("_0x")
   if (marker <= 0) return null
   return id.slice(0, marker).toLowerCase()
+}
+
+/** Exact-symbol ERC-20 on PulseChain with the most holders (at least 100), from the free Blockscout API. */
+async function mostHeldPulseToken(symbol: string): Promise<string | null> {
+  const body = await cached(`pls-explorer-search:${symbol.toUpperCase()}`, 12 * 60 * 60 * 1000, () =>
+    fetchJson<{ items?: { symbol?: string; address?: string; address_hash?: string; holders?: string; holders_count?: string }[] }>(
+      `https://api.scan.pulsechain.com/api/v2/tokens?q=${encodeURIComponent(symbol)}&type=ERC-20`,
+      { minIntervalMs: 250, timeoutMs: 10_000 },
+    ),
+  )
+  const wanted = symbol.toUpperCase()
+  const best = (body.items ?? [])
+    .filter((item) => item.symbol?.toUpperCase() === wanted)
+    .map((item) => ({ address: item.address ?? item.address_hash ?? null, holders: Number(item.holders ?? item.holders_count ?? 0) }))
+    .filter((item): item is { address: string; holders: number } => Boolean(item.address) && item.holders >= 100)
+    .sort((a, b) => b.holders - a.holders)[0]
+  return best ? best.address.toLowerCase() : null
 }
 
 async function searchDex(symbol: string, hintedChain?: string | null): Promise<ResolvedAsset | null> {
