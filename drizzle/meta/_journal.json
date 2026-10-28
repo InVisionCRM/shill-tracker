@@ -43,6 +43,13 @@
       "when": 1793240000000,
       "tag": "0005_price_match",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793153952613,
+      "tag": "0006_queue_influencers",
+      "breakpoints": true
     }
   ]
 }

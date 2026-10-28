@@ -55,6 +55,7 @@ async function Voices() {
                       <CardDescription className="font-mono">@{row.username}</CardDescription>
                     </div>
                     {row.isDemo ? <Badge variant="outline">Demo</Badge> : null}
+                    {row.queuedAt ? <Badge variant="secondary">Queued</Badge> : null}
                   </div>
                 </CardHeader>
                 <CardContent className="font-mono text-sm text-muted-foreground">

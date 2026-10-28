@@ -36,6 +36,11 @@ export const influencers = pgTable(
     /** Lowercase word → ticker symbol, used only for this voice. */
     aliases: jsonb("aliases").$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
     latestPostId: text("latest_post_id"),
+    /**
+     * Set while this voice waits its turn. GET /api/influencers (the bot's read list) omits it until
+     * promoted, so only one never-ingested voice backfills at a time against the ~1,000 reads/day budget.
+     */
+    queuedAt: timestamp("queued_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

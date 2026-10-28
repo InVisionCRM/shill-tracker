@@ -7,6 +7,7 @@ import { buttonVariants } from "@/components/ui/button"
 // so its code is fetched only when someone clicks.
 const TrackVoiceDialog = lazy(() => import("./voice-actions").then((mod) => ({ default: mod.TrackVoiceDialog })))
 const UntrackDialog = lazy(() => import("./voice-actions").then((mod) => ({ default: mod.UntrackButton })))
+const QueueCta = lazy(() => import("./voice-actions").then((mod) => ({ default: mod.QueueVoiceCta })))
 
 export function TrackVoiceButton() {
   const [wanted, setWanted] = useState(false)
@@ -40,6 +41,20 @@ export function UntrackLauncher({ username }: { username: string }) {
   return (
     <Suspense fallback={button}>
       <UntrackDialog username={username} defaultOpen />
+    </Suspense>
+  )
+}
+
+/** Search-miss CTA: queue the searched handle with one click, code loaded only when shown. */
+export function QueueVoiceButton({ username }: { username: string }) {
+  const fallback = (
+    <button type="button" className={buttonVariants({ variant: "outline" })} disabled aria-busy>
+      Queue @{username} to track
+    </button>
+  )
+  return (
+    <Suspense fallback={fallback}>
+      <QueueCta username={username} />
     </Suspense>
   )
 }

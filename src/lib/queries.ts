@@ -1,4 +1,4 @@
-import { and, desc, eq, getTableColumns, ilike, inArray, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, getTableColumns, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm"
 import { getDb } from "./db"
 import { influencerStats, influencers, mentions, posts, pulseTokens, quotes } from "./db/schema"
 import { callRankWindow, firstMentionIds, repeatCountFor } from "./scoring/call-rank"
@@ -41,6 +41,32 @@ export async function getTapeLogos() {
   }))
   if (rows.length > 0) return { source: "tape" as const, logos: rows }
   return { source: "markets" as const, logos: PRICED_MARKETS }
+}
+
+/** Every distinct shilled token, for the dock. One row per (symbol, chain), busiest first. */
+export async function getDockTokens() {
+  const db = getDb()
+  const result = await db.execute(sql`
+    select symbol, chain, image_url, calls from (
+      select
+        upper(m.symbol) as symbol,
+        m.chain,
+        max(t.image_url) as image_url,
+        count(*)::int as calls
+      from mentions m
+      join influencers i on i.id = m.influencer_id
+      left join pulse_tokens t on upper(t.symbol) = upper(m.symbol)
+      where m.id in (${firstMentionIds})
+        and i.is_demo = false
+        and m.symbol is not null
+        and char_length(m.symbol) between 1 and 12
+      group by 1, 2
+    ) tokens
+    order by calls desc, symbol asc
+  `)
+  return resultRows<{ symbol: string; chain: string | null; image_url: string | null; calls: number }>(result).map(
+    (row) => ({ symbol: row.symbol, chain: row.chain, imageUrl: row.image_url, calls: row.calls }),
+  )
 }
 
 export async function getOverview() {
@@ -153,6 +179,7 @@ export async function getLeaderboard() {
       followersCount: influencers.followersCount,
       tracked: influencers.tracked,
       isDemo: influencers.isDemo,
+      queuedAt: influencers.queuedAt,
       shillCount: influencerStats.shillCount,
       postCount: influencerStats.postCount,
       uniqueTickers: influencerStats.uniqueTickers,
@@ -248,6 +275,7 @@ export async function getInfluencer(username: string) {
     mentionTotal,
     postTotal: postCount?.n ?? postRows.length,
     firstCalls: firstRows,
+    queuePosition: await queuePosition(influencer.queuedAt),
   }
 }
 
@@ -573,8 +601,36 @@ export async function searchAll(query: string) {
   return { influencers: voiceRows, mentions: mentionRows }
 }
 
+/**
+ * Promotes the next queued voice once no active voice is still mid-backfill (tracked, active, no post
+ * yet). Runs on every bot poll so a slot frees up within one poll cycle of the backfill finishing.
+ */
+async function promoteQueued(db: ReturnType<typeof getDb>) {
+  const [backfilling] = await db
+    .select({ id: influencers.id })
+    .from(influencers)
+    .where(
+      and(
+        eq(influencers.tracked, true),
+        eq(influencers.isDemo, false),
+        isNull(influencers.queuedAt),
+        isNull(influencers.latestPostId),
+      ),
+    )
+    .limit(1)
+  if (backfilling) return
+  const [next] = await db
+    .select({ id: influencers.id })
+    .from(influencers)
+    .where(and(eq(influencers.tracked, true), eq(influencers.isDemo, false), isNotNull(influencers.queuedAt)))
+    .orderBy(asc(influencers.queuedAt))
+    .limit(1)
+  if (next) await db.update(influencers).set({ queuedAt: null, updatedAt: new Date() }).where(eq(influencers.id, next.id))
+}
+
 export async function listTrackedForBot() {
   const db = getDb()
+  await promoteQueued(db)
   return db
     .select({
       id: influencers.id,
@@ -588,6 +644,17 @@ export async function listTrackedForBot() {
       latest_post_id: influencers.latestPostId,
     })
     .from(influencers)
-    .where(and(eq(influencers.tracked, true), eq(influencers.isDemo, false)))
+    .where(and(eq(influencers.tracked, true), eq(influencers.isDemo, false), isNull(influencers.queuedAt)))
     .orderBy(influencers.username)
+}
+
+/** 1-based position in the wait list, earliest-queued first. Null when not queued. */
+export async function queuePosition(queuedAt: Date | null) {
+  if (!queuedAt) return null
+  const db = getDb()
+  const result = await db.execute(sql`
+    select count(*)::int as n from influencers
+    where tracked = true and is_demo = false and queued_at is not null and queued_at <= ${queuedAt}
+  `)
+  return resultRows<{ n: number }>(result)[0]?.n ?? null
 }

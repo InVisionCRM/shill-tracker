@@ -74,6 +74,11 @@ async function Profile({ username, searchParams }: { username: string; searchPar
               <p className="text-2xl font-semibold tracking-tight">{influencer.name}</p>
               {influencer.isDemo ? <Badge variant="outline">Demo</Badge> : null}
               {!influencer.tracked ? <Badge variant="secondary">Not tracked</Badge> : null}
+              {influencer.queuedAt ? (
+                <Badge variant="secondary">Queued{data.queuePosition ? ` #${data.queuePosition}` : ""}</Badge>
+              ) : influencer.tracked && !influencer.latestPostId ? (
+                <Badge variant="secondary">Loading history</Badge>
+              ) : null}
               {(stats?.pumpDumpCount ?? 0) > 0 ? <Badge variant="destructive">Pump then dump</Badge> : null}
             </div>
             <p className="font-mono text-sm text-muted-foreground">@{influencer.username}</p>
@@ -84,6 +89,17 @@ async function Profile({ username, searchParams }: { username: string; searchPar
         </div>
         {influencer.tracked ? <UntrackLauncher username={influencer.username} /> : null}
       </header>
+
+      {influencer.queuedAt ? (
+        <p className="rounded-lg border bg-card/70 px-4 py-3 text-sm text-muted-foreground">
+          Waiting for a read slot{data.queuePosition ? ` — #${data.queuePosition} in line` : ""}. Only one new voice
+          backfills at a time so the ~1,000 X reads/day budget covers everyone over time.
+        </p>
+      ) : influencer.tracked && !influencer.latestPostId ? (
+        <p className="rounded-lg border bg-card/70 px-4 py-3 text-sm text-muted-foreground">
+          Loading this voice&apos;s history now. Calls will appear as the bot reads its timeline.
+        </p>
+      ) : null}
 
       <CallTimeline calls={shownFirst} logos={logos} total={data.firstCalls.length} />
 

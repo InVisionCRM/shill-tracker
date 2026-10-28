@@ -44,6 +44,7 @@ type LeaderSource = {
   profileImageUrl: string | null
   followersCount: number
   isDemo: boolean
+  queuedAt: Date | null
   shillCount: number | null
   postCount: number | null
   uniqueTickers: number | null
@@ -65,6 +66,7 @@ type LeaderSource = {
 export function toLeader(row: LeaderSource): LeaderRow {
   return {
     ...row,
+    queuedAt: row.queuedAt ? row.queuedAt.toISOString() : null,
     shillCount: row.shillCount ?? 0,
     postCount: row.postCount ?? 0,
     uniqueTickers: row.uniqueTickers ?? 0,

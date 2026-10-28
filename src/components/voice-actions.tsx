@@ -49,7 +49,8 @@ export function TrackVoiceDialog({ defaultOpen = false }: { defaultOpen?: boolea
           <DialogTitle>Track an X account</DialogTitle>
           <DialogDescription>
             The handle is stored for your ingest bot. Posts arrive when the bot POSTs them. Nothing is fetched from X
-            by this app.
+            by this app. If another voice is still mid-backfill, this one waits its turn so the daily X read budget
+            isn&apos;t split across several at once.
           </DialogDescription>
         </DialogHeader>
         <form action={action} className="flex flex-col gap-4">
@@ -73,6 +74,31 @@ export function TrackVoiceDialog({ defaultOpen = false }: { defaultOpen?: boolea
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** One-click queue from a search miss: no dialog, same trackVoice action as the header button. */
+export function QueueVoiceCta({ username }: { username: string }) {
+  const router = useRouter()
+  const [state, action, pending] = useActionState(
+    async (prev: ActionState, formData: FormData) => {
+      const result = await trackVoice(prev, formData)
+      if (result?.ok && result.username) {
+        toast.success(`Queued @${result.username}`)
+        router.push(`/influencers/${result.username}`)
+      }
+      return result
+    },
+    null,
+  )
+  return (
+    <form action={action} className="flex flex-col gap-2">
+      <input type="hidden" name="username" value={username} />
+      {state?.error ? <p className="text-sm text-loss">{state.error}</p> : null}
+      <Button type="submit" disabled={pending} variant="outline" className="self-start">
+        {pending ? "Queuing…" : `Queue @${username} to track`}
+      </Button>
+    </form>
   )
 }
 

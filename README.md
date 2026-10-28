@@ -72,7 +72,11 @@ Content-Type: application/json
 
 ### `GET /api/influencers`
 
-Tracked handles for the bot. Demo voices are omitted.
+Tracked handles for the bot. Demo voices are omitted. A newly tracked voice queues behind whichever
+voice is still mid-backfill (tracked but with no stored post yet) and is withheld from this list until
+promoted, so only one never-ingested voice is ever being backfilled at once — the whole roster can't blow
+the ~1,000-reads-a-day budget by backfilling in parallel. Everyone already backfilled keeps polling
+normally with `since_id`.
 
 ```json
 {

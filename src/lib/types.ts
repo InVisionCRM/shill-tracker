@@ -106,6 +106,8 @@ export type LeaderRow = {
   sampleSize: number
   repeatAssets: number
   allScores: ScoreSnapshot | null
+  /** Set while this voice waits for a backfill slot; null once the bot has started reading it. */
+  queuedAt: string | null
 }
 
 export type PricingProgress = {

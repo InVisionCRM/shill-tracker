@@ -3,7 +3,9 @@ import Link from "next/link"
 import { Outcome } from "@/components/outcome"
 import { connection } from "next/server"
 import { SearchBox } from "@/components/search-box"
+import { QueueVoiceButton } from "@/components/track-voice-button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { normalizeUsername } from "@/lib/http"
 import { searchAll } from "@/lib/queries"
 
 export const metadata = { title: "Search", description: "Find a tracked X account or a ticker and see every priced call." }
@@ -33,6 +35,7 @@ async function Results({ searchParams }: { searchParams: Promise<{ q?: string }>
   const { q = "" } = await searchParams
   const query = q.trim()
   const result = query ? await searchAll(query) : { influencers: [], mentions: [] }
+  const handle = query && !query.startsWith("$") ? normalizeUsername(query) : null
   return (
     <div className="flex flex-col gap-6">
       {!query ? (
@@ -43,11 +46,13 @@ async function Results({ searchParams }: { searchParams: Promise<{ q?: string }>
             <EmptyTitle>No matches for {query}</EmptyTitle>
             <EmptyDescription>Tracked voices and detected tickers are the only index.</EmptyDescription>
           </EmptyHeader>
+          {handle ? <QueueVoiceButton username={handle} /> : null}
         </Empty>
       ) : (
         <div className="grid gap-6 md:grid-cols-2">
           <section>
             <h2 className="mb-3 text-sm tracking-[0.16em] text-muted-foreground uppercase">Voices</h2>
+            {result.influencers.length === 0 && handle ? <QueueVoiceButton username={handle} /> : null}
             <ul className="flex flex-col gap-2">
               {result.influencers.map((voice) => (
                 <li key={voice.id}>

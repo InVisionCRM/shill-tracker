@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm"
+import { and, eq, isNull } from "drizzle-orm"
 import { classifyPostMaybeLlm } from "./detect/context"
 import { collapseMatches, extractMatches, identifyFast } from "./detect/extract"
 import { linkNearbyPosts, linkSamePost } from "./detect/link"
@@ -319,6 +319,27 @@ export async function ingestPosts(input: IngestPayload, options?: { deferPricing
   } satisfies IngestResult
 }
 
+/**
+ * A fresh handle backfills its whole timeline on the bot's first poll, which can run through a large
+ * slice of the ~1,000 X reads/day budget by itself. So only one tracked, non-demo voice is ever mid-backfill
+ * (tracked, active, and still with no stored post) at a time; everyone else behind it waits in the queue.
+ */
+async function queueSlot(db: ReturnType<typeof getDb>) {
+  const [backfilling] = await db
+    .select({ id: influencers.id })
+    .from(influencers)
+    .where(
+      and(
+        eq(influencers.tracked, true),
+        eq(influencers.isDemo, false),
+        isNull(influencers.queuedAt),
+        isNull(influencers.latestPostId),
+      ),
+    )
+    .limit(1)
+  return backfilling ? new Date() : null
+}
+
 export async function addInfluencer(input: {
   username: string
   name?: string | null
@@ -331,12 +352,14 @@ export async function addInfluencer(input: {
   const db = getDb()
   const existing = await db.select().from(influencers).where(eq(influencers.username, username)).limit(1)
   if (existing[0]) {
+    const slot = existing[0].tracked ? undefined : await queueSlot(db)
     const updated = await db
       .update(influencers)
       .set({
         tracked: true,
         name: input.name?.trim() || existing[0].name,
         xUserId: input.xUserId?.trim() || existing[0].xUserId,
+        ...(slot !== undefined ? { queuedAt: slot } : {}),
         updatedAt: new Date(),
       })
       .where(eq(influencers.id, existing[0].id))
@@ -352,6 +375,7 @@ export async function addInfluencer(input: {
       profileImageUrl: `/avatars/${username}`,
       tracked: true,
       isDemo: false,
+      queuedAt: await queueSlot(db),
     })
     .returning()
   await recomputeInfluencers([inserted[0].id])
