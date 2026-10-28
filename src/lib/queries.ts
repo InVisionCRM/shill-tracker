@@ -259,7 +259,7 @@ export async function getInfluencer(username: string) {
       from mentions
       where influencer_id = ${influencer.id}
         and id in (${firstMentionIds})
-        and resolution_status <> 'unresolved'
+        and resolution_status not in ('unresolved', 'rejected')
         and price_status is distinct from 'unverifiable'
     ) firsts
     order by created_at desc
@@ -453,7 +453,7 @@ export async function getTicker(symbol: string) {
       select id
       from mentions
       where id in (${firstMentionIds})
-        and resolution_status <> 'unresolved'
+        and resolution_status not in ('unresolved', 'rejected')
         and price_status is distinct from 'unverifiable'
         and (
           upper(symbol) = upper(${normalized})
