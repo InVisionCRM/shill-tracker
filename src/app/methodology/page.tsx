@@ -128,6 +128,12 @@ export default function MethodologyPage() {
           Missing prints are left out of that horizon. On first calls, a ticker the voice names again is not a
           second stake. Repeat shills are assets named more than once by the same voice.
         </p>
+        <p className="text-sm leading-6">
+          Voices are PulseChain influencers only: accounts whose shills are mostly PulseChain tokens. A newly
+          tracked voice is untracked once it has enough chain-determined mentions to show it is not one — a
+          general-crypto, Ethereum, Solana, or stock-trading account reads the same way a rejected ticker does:
+          it drops off the leaderboard, the feed, search, and the dock.
+        </p>
       </section>
 
       <section className="flex flex-col gap-3">
