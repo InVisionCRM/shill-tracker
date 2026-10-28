@@ -108,7 +108,7 @@ async function Profile({ username, searchParams }: { username: string; searchPar
   const allPack = allScores
     ? packFrom(allScores, peek(allScores.bestMentionId), peek(allScores.worstMentionId), allPositions, allComplete, stats?.uniqueTickers ?? 0)
     : firstPack
-  const shownFirst = data.firstCalls.slice(0, 40)
+  const shownFirst = data.firstCalls.slice(0, 20)
   const shownPosts = showAll ? posts : posts.slice(0, ARCHIVE_FIRST)
   const earliest = data.firstCalls[data.firstCalls.length - 1] ?? null
   const logos = await logosForSymbols(
@@ -236,12 +236,13 @@ async function Profile({ username, searchParams }: { username: string; searchPar
               <div className="mt-3 flex flex-wrap gap-2">
                 {(byPost.get(post.id) ?? []).map((mention) => (
                   <Link key={mention.id} href={`/shills/${mention.id}`} className={mentionMuted(mention.callKind, mention.priceStatus)}>
-                    <Badge variant={mention.pumpDumpFlag ? "destructive" : "secondary"}>
+                    {/* Lean chip instead of <Badge>: the archive repeats it dozens of times in HTML and RSC. */}
+                    <span className={`chip ${mention.pumpDumpFlag ? "chip-bad" : ""}`}>
                       {mention.symbol ? `$${mention.symbol}` : mention.rawText}{" "}
                       {mention.priceStatus === "unverifiable"
                         ? "unverifiable"
                         : formatRoi(mention.roi7d ?? mention.roi24h ?? mention.roiNow)}
-                    </Badge>
+                    </span>
                     <MentionTags
                       callKind={mention.callKind}
                       priceStatus={mention.priceStatus}

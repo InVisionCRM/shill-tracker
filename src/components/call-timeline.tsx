@@ -40,14 +40,10 @@ export function CallTimeline({
         </p>
       </div>
       <ol className="relative ms-3 flex flex-col gap-3 border-s border-phosphor/40 ps-6">
-        {calls.map((call, index) => {
+        {calls.map((call) => {
           const roi = call.roi7d ?? call.roi24h ?? call.roiNow
           return (
-            <li
-              key={call.id}
-              className={index < 8 ? "timeline-item relative" : "relative"}
-              style={index < 8 ? { animationDelay: `${index * 40}ms` } : undefined}
-            >
+            <li key={call.id} className="relative">
               <span
                 className="absolute -start-[1.65rem] top-4 size-2.5 rounded-full bg-phosphor ring-4 ring-background"
                 aria-hidden
