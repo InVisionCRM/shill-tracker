@@ -50,6 +50,13 @@
       "when": 1793250000000,
       "tag": "0006_queue_influencers",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793260000000,
+      "tag": "0007_pulsechain_only",
+      "breakpoints": true
     }
   ]
 }
