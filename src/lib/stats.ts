@@ -1,7 +1,8 @@
-import { getTableColumns, inArray } from "drizzle-orm"
+import { eq, getTableColumns, inArray } from "drizzle-orm"
 import { getDb } from "./db"
-import { influencerStats, mentions, posts } from "./db/schema"
+import { influencerStats, influencers, mentions, posts } from "./db/schema"
 import { aggregateInfluencer, type InfluencerAggregate, type StatMention } from "./scoring/aggregate"
+import { failsPulseChainCheck } from "./scoring/chain-guard"
 import type { ScoreSnapshot } from "./types"
 
 export async function recomputeInfluencers(influencerIds?: string[]) {
@@ -17,6 +18,10 @@ export async function recomputeInfluencers(influencerIds?: string[]) {
         .from(posts)
         .where(inArray(posts.influencerId, influencerIds))
     : await db.select({ influencerId: posts.influencerId }).from(posts)
+  const influencerRows = influencerIds?.length
+    ? await db.select().from(influencers).where(inArray(influencers.id, influencerIds))
+    : await db.select().from(influencers)
+  const influencerById = new Map(influencerRows.map((row) => [row.id, row]))
 
   const ids = new Set<string>(influencerIds ?? [])
   if (!influencerIds) {
@@ -25,6 +30,7 @@ export async function recomputeInfluencers(influencerIds?: string[]) {
   }
 
   const mentionsBy = new Map<string, StatMention[]>()
+  const chainsBy = new Map<string, { chain: string | null }[]>()
   for (const row of mentionRows) {
     const list = mentionsBy.get(row.influencerId) ?? []
     list.push({
@@ -46,6 +52,19 @@ export async function recomputeInfluencers(influencerIds?: string[]) {
       priceStatus: row.priceStatus,
     })
     mentionsBy.set(row.influencerId, list)
+    const chainList = chainsBy.get(row.influencerId) ?? []
+    chainList.push({ chain: row.chain })
+    chainsBy.set(row.influencerId, chainList)
+  }
+
+  // PulseChain tickers only: a tracked, non-demo, non-preset voice whose shills turn out to be mostly
+  // off-chain is untracked the moment there's enough signal, so the bot stops reading its timeline.
+  for (const influencerId of ids) {
+    const info = influencerById.get(influencerId)
+    if (!info || !info.tracked || info.isDemo || info.chainBias) continue
+    if (failsPulseChainCheck(chainsBy.get(influencerId) ?? [])) {
+      await db.update(influencers).set({ tracked: false, updatedAt: new Date() }).where(eq(influencers.id, influencerId))
+    }
   }
 
   const postCounts = new Map<string, number>()
