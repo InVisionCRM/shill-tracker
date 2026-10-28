@@ -57,9 +57,7 @@ export function AppFrame({
           <PricingBar />
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-28">{children}</main>
-        <Suspense fallback={null}>
-          <TokenDock />
-        </Suspense>
+        <TokenDock />
         <footer className="mb-16 border-t py-6 text-center text-xs text-muted-foreground md:mb-0">
           Calls are not advice. Seed paths are labeled. Live marks come from Binance, CoinGecko, and DexScreener.
         </footer>

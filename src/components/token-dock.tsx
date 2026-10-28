@@ -1,16 +1,42 @@
+"use client"
+
 import Link from "next/link"
-import { connection } from "next/server"
+import { useEffect, useState } from "react"
 import { TokenLogo } from "./token-logo"
-import { getDockTokens } from "@/lib/queries"
+
+type DockToken = { symbol: string; chain: string | null; imageUrl: string | null; calls: number }
 
 /**
- * Mac-style dock, right edge, desktop only (outcome 7: no extra JS or images on mobile). Every icon is a
- * plain CSS hover-scale, so the "grow on hover" effect costs nothing beyond the stylesheet.
+ * Mac-style dock, right edge, desktop only. Below the `lg` breakpoint this fetches nothing and renders
+ * nothing (outcome 7: mobile ships zero extra bytes for it), unlike a server-rendered list that would
+ * ship every icon's HTML to every device regardless of whether it is ever shown.
  */
-export async function TokenDock() {
-  await connection()
-  const tokens = await getDockTokens()
-  if (!tokens.length) return null
+export function TokenDock() {
+  const [tokens, setTokens] = useState<DockToken[] | null>(null)
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)")
+    let cancelled = false
+    const load = () => {
+      if (!query.matches || tokens) return
+      fetch("/api/dock")
+        .then((response) => (response.ok ? response.json() : null))
+        .then((body: { tokens?: DockToken[] } | null) => {
+          if (!cancelled && body?.tokens) setTokens(body.tokens)
+        })
+        .catch(() => undefined)
+    }
+    load()
+    query.addEventListener("change", load)
+    return () => {
+      cancelled = true
+      query.removeEventListener("change", load)
+    }
+    // tokens is read, not a dependency: once loaded we never want to re-fetch on a later resize event.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  if (!tokens?.length) return null
   return (
     <aside
       aria-label="Every shilled token"

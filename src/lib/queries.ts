@@ -43,8 +43,8 @@ export async function getTapeLogos() {
   return { source: "markets" as const, logos: PRICED_MARKETS }
 }
 
-/** Every distinct shilled token, for the dock. One row per (symbol, chain), busiest first. */
-export async function getDockTokens() {
+/** The busiest shilled tokens, for the dock. One row per (symbol, chain). Capped: see api/dock/route.ts. */
+export async function getDockTokens(limit = 300) {
   const db = getDb()
   const result = await db.execute(sql`
     select symbol, chain, image_url, calls from (
@@ -58,11 +58,13 @@ export async function getDockTokens() {
       left join pulse_tokens t on upper(t.symbol) = upper(m.symbol)
       where m.id in (${firstMentionIds})
         and i.is_demo = false
+        and m.resolution_status not in ('unresolved', 'rejected')
         and m.symbol is not null
         and char_length(m.symbol) between 1 and 12
       group by 1, 2
     ) tokens
     order by calls desc, symbol asc
+    limit ${limit}
   `)
   return resultRows<{ symbol: string; chain: string | null; image_url: string | null; calls: number }>(result).map(
     (row) => ({ symbol: row.symbol, chain: row.chain, imageUrl: row.image_url, calls: row.calls }),
