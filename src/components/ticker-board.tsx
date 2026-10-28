@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Outcome } from "@/components/outcome"
 import { RelativeTime } from "@/components/animated-number"
 import { MentionTags, mentionMuted } from "@/components/mention-tags"
-import { formatCallDate, formatUsd } from "@/lib/format"
+import { formatCallDate } from "@/lib/format"
 
 type FirstRow = {
   id: string
@@ -58,7 +58,6 @@ export function TickerBoard({
                 <span className="mt-1 block font-mono text-sm">
                   {formatCallDate(row.createdAt)}
                 </span>
-                <span className="block font-mono text-sm text-muted-foreground">Entry {formatUsd(row.priceAt)}</span>
                 <span className="mt-1 block text-xs text-muted-foreground">
                   {row.mentionCount > 1
                     ? `First call · mentioned ${row.mentionCount - 1} more ${row.mentionCount - 1 === 1 ? "time" : "times"}`

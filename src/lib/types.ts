@@ -21,10 +21,6 @@ export type FeedDTO = {
   resolutionConfidence?: string | null
   priceAt: number | null
   priceNow: number | null
-  roi1h: number | null
-  roi24h: number | null
-  roi7d: number | null
-  roiNow: number | null
   pumpDumpFlag: boolean
   pumpDumpScore: number | null
   priceStatus: string
@@ -96,12 +92,10 @@ export type LeaderRow = {
   postCount: number
   uniqueTickers: number
   pricedCount: number
-  winRate24h: number | null
-  winRate7d: number | null
-  medianRoi24h: number | null
-  medianRoi7d: number | null
-  portfolio7d: number | null
-  portfolioN7d: number
+  /** Share of first calls where price now > price at the shill. */
+  winRateNow: number | null
+  /** Median of (price now − price at shill) / price at shill over first calls. */
+  medianRoiNow: number | null
   portfolioNow: number | null
   portfolioNNow: number
   pumpDumpCount: number

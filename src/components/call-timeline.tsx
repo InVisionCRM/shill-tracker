@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { TokenLogo } from "@/components/token-logo"
-import { formatCallDate, formatUsd } from "@/lib/format"
+import { formatCallDate } from "@/lib/format"
 import { Outcome } from "@/components/outcome"
 import { PriceMatchNote } from "@/components/price-match-note"
 
@@ -16,6 +16,7 @@ export type TimelineCall = {
   roi7d: number | null
   roi24h: number | null
   roiNow: number | null
+  priceNow: number | null
   pumpDumpFlag: boolean
 }
 
@@ -61,7 +62,7 @@ export function CallTimeline({
                     {call.pumpDumpFlag ? <Badge variant="destructive">Pump then dump</Badge> : null}
                   </span>
                   <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
-                    {formatCallDate(call.createdAt)} · {formatUsd(call.priceAt)}
+                    {formatCallDate(call.createdAt)}
                   </span>
                   <PriceMatchNote match={call.priceMatch} at={call.priceAtTs} />
                 </span>

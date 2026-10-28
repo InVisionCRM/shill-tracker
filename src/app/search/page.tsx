@@ -1,10 +1,10 @@
 import { Suspense } from "react"
 import Link from "next/link"
+import { Outcome } from "@/components/outcome"
 import { connection } from "next/server"
 import { SearchBox } from "@/components/search-box"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { searchAll } from "@/lib/queries"
-import { formatRoi, roiClass } from "@/lib/format"
 
 export const metadata = { title: "Search", description: "Find a tracked X account or a ticker and see every priced call." }
 
@@ -69,9 +69,7 @@ async function Results({ searchParams }: { searchParams: Promise<{ q?: string }>
                       <span className="font-mono text-phosphor">${mention.symbol}</span>
                       <span className="ml-2 text-xs text-muted-foreground">{mention.name}</span>
                     </span>
-                    <span className={`font-mono text-sm ${roiClass(mention.roi7d ?? mention.roiNow)}`}>
-                      {formatRoi(mention.roi7d ?? mention.roiNow)}
-                    </span>
+                    <Outcome row={mention} />
                   </Link>
                 </li>
               ))}

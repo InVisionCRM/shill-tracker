@@ -8,7 +8,7 @@ import { RelativeTime } from "@/components/animated-number"
 import { UntrackLauncher } from "@/components/track-voice-button"
 import { VoiceAvatar } from "@/components/voice-avatar"
 import { CallTimeline } from "@/components/call-timeline"
-import { callOutcome } from "@/components/outcome"
+import { shillMove } from "@/components/outcome"
 import { mentionMuted } from "@/components/mention-tags"
 import { formatCompact, formatRoi, roiClass } from "@/lib/format"
 import { logosForSymbols } from "@/lib/pulsechain/lookup"
@@ -104,13 +104,13 @@ async function Profile({ username, searchParams }: { username: string; searchPar
               <PostText text={post.text} />
               <div className="mt-3 flex flex-wrap gap-2">
                 {(byPost.get(post.id) ?? []).map((mention) => {
-                  const outcome = callOutcome(mention)
+                  const move = shillMove(mention)
                   return (
                     <Link key={mention.id} href={`/shills/${mention.id}`} className={mentionMuted(mention.callKind, mention.priceStatus)}>
                       <span className={`chip ${mention.pumpDumpFlag ? "chip-bad" : ""}`}>
                         {mention.symbol ? `$${mention.symbol}` : mention.rawText}{" "}
-                        <span className={`font-bold ${roiClass(outcome.value)}`}>
-                          {mention.priceStatus === "unverifiable" ? "unverifiable" : formatRoi(outcome.value)}
+                        <span className={`font-bold ${roiClass(move)}`}>
+                          {move == null ? "price pending" : formatRoi(move)}
                         </span>
                       </span>
                     </Link>

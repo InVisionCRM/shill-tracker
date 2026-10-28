@@ -7,12 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { PriceChart } from "@/components/price-chart"
 import { PostText } from "@/components/post-text"
 import { RelativeTime } from "@/components/animated-number"
-import { MarkPrice, MarkRoi } from "@/components/mark"
 import { VoiceAvatar } from "@/components/voice-avatar"
 import { Outcome } from "@/components/outcome"
 import { TokenLogo } from "@/components/token-logo"
 import { MentionTags, mentionMuted } from "@/components/mention-tags"
-import { chainLabel, formatRoi, formatUsd, roiClass, shortAddress } from "@/lib/format"
+import { chainLabel, shortAddress } from "@/lib/format"
 import { logosForAddresses, logosForSymbols } from "@/lib/pulsechain/lookup"
 import { getMention } from "@/lib/queries"
 import { PriceMatchNote } from "@/components/price-match-note"
@@ -39,12 +38,6 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
     (mention.contractAddress ? byAddress.get(mention.contractAddress.toLowerCase()) : null) ??
     (mention.symbol ? bySymbol.get(mention.symbol.toUpperCase()) : null) ??
     null
-  const horizons = [
-    ["1h", mention.roi1h, mention.price1h],
-    ["24h", mention.roi24h, mention.price24h],
-    ["7d", mention.roi7d, mention.price7d],
-    ["30d", mention.roi30d, mention.price30d],
-  ] as const
 
   return (
     <div className={`relative flex flex-col gap-6 ${mentionMuted(mention.callKind, mention.priceStatus)}`}>
@@ -115,29 +108,7 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
           <CardContent className="flex flex-col gap-4">
             <PostText text={post.text} />
             <p className="text-xs text-muted-foreground">{mention.confidenceReason}</p>
-            <dl className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <dt className="text-xs text-muted-foreground">Entry</dt>
-                <dd className="font-mono">
-                  {formatUsd(mention.priceAt)}
-                  <PriceMatchNote match={mention.priceMatch} at={mention.priceAtTs} className="mt-0.5" />
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Mark</dt>
-                <dd>
-                  <MarkPrice assetKey={mention.assetKey} fallback={mention.priceNow} pinned={mention.pinned} />
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Max gain</dt>
-                <dd className={`font-mono ${roiClass(mention.maxGain)}`}>{formatRoi(mention.maxGain)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Max drawdown</dt>
-                <dd className={`font-mono ${roiClass(mention.maxDrawdown)}`}>{formatRoi(mention.maxDrawdown)}</dd>
-              </div>
-            </dl>
+            <PriceMatchNote match={mention.priceMatch} at={mention.priceAtTs} />
             {mention.contractAddress ? (
               <p className="font-mono text-xs text-muted-foreground">
                 {mention.chain} {shortAddress(mention.contractAddress)}
@@ -156,87 +127,6 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
         </Card>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {horizons.map(([label, roi, price]) => (
-          <Card key={label}>
-            <CardHeader>
-              <CardDescription>{label}</CardDescription>
-              <CardTitle className={`font-mono text-xl font-bold tabular-nums ${roiClass(roi)}`}>
-                {formatRoi(roi)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="font-mono text-xs text-muted-foreground">{formatUsd(price)}</p>
-            </CardContent>
-          </Card>
-        ))}
-        <Card>
-          <CardHeader>
-            <CardDescription>Mark</CardDescription>
-            <CardTitle className="font-mono text-2xl">
-              <MarkRoi
-                assetKey={mention.assetKey}
-                priceAt={mention.priceAt}
-                fallbackRoi={mention.roiNow}
-                fallbackPrice={mention.priceNow}
-                pinned={mention.pinned}
-                source={mention.priceSource}
-              />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              {mention.pinned ? "Pinned demo path" : "Updates with the live quote"}
-            </p>
-          </CardContent>
-        </Card>
-      </section>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Pump-then-dump</CardTitle>
-          <CardDescription>
-            Score {mention.pumpDumpScore == null ? "unavailable" : Math.round(mention.pumpDumpScore)} / 100. Run-up
-            before the post is compared with the return after it, plus a volume check.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <Bar label="24h before" value={mention.runup24h} />
-          <Bar label="7d before" value={mention.runup7d} />
-          <Bar label="24h after" value={mention.roi24h} />
-          <Bar label="7d after" value={mention.roi7d} />
-          <div className="md:col-span-2">
-            <ul className="flex flex-col gap-2 text-sm leading-6">
-              {(mention.pumpDumpReasons ?? []).map((reason) => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Volume 24h before {formatUsd(mention.volumeBefore24h)} · after {formatUsd(mention.volumeAfter24h)}.
-              The full formula is on the method page.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-function Bar({ label, value }: { label: string; value: number | null }) {
-  const width = value == null ? 0 : Math.min(100, Math.abs(value) * 100)
-  const positive = (value ?? 0) >= 0
-  return (
-    <div>
-      <div className="mb-1 flex justify-between text-xs">
-        <span className="text-muted-foreground">{label}</span>
-        <span className={`font-mono ${roiClass(value)}`}>{formatRoi(value)}</span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div
-          className={`h-full ${positive ? "bg-gain" : "bg-loss"}`}
-          style={{ width: `${width}%` }}
-        />
-      </div>
     </div>
   )
 }

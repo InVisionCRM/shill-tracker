@@ -40,6 +40,7 @@ export async function recomputeInfluencers(influencerIds?: string[]) {
       pumpDumpFlag: row.pumpDumpFlag,
       pumpDumpScore: row.pumpDumpScore,
       priceAt: row.priceAt,
+      priceNow: row.priceNow,
       callKind: row.callKind,
       resolutionStatus: row.resolutionStatus,
       priceStatus: row.priceStatus,

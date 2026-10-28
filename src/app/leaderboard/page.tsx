@@ -6,7 +6,7 @@ import { toLeader } from "@/lib/serialize"
 
 export const metadata = {
   title: "Leaderboard",
-  description: "X accounts ranked by how their crypto calls actually performed at 24h, 7d and 30d.",
+  description: "X accounts ranked by how their first calls moved from the price at the shill to now.",
 }
 
 export default function LeaderboardPage() {
@@ -16,7 +16,7 @@ export default function LeaderboardPage() {
         <p className="font-mono text-xs tracking-[0.18em] text-phosphor uppercase">Leaderboard</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Who called it, and who arrived after the pump.</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          Credibility prefers the 7 day print once three calls have settled. Dump risk rises when the chart ran
+          Every score uses (price now − price at the shill) / price at the shill. Dump risk rises when the chart ran
           before the post and faded after. Small samples are pulled toward uncertain, not innocent. Every score uses
           each voice&apos;s first call of a ticker only.
         </p>

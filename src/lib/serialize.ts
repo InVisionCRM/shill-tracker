@@ -13,10 +13,6 @@ type FeedRow = {
   resolutionConfidence?: string | null
   priceAt: number | null
   priceNow: number | null
-  roi1h: number | null
-  roi24h: number | null
-  roi7d: number | null
-  roiNow: number | null
   pumpDumpFlag: boolean
   pumpDumpScore: number | null
   priceStatus: string
@@ -52,12 +48,8 @@ type LeaderSource = {
   postCount: number | null
   uniqueTickers: number | null
   pricedCount: number | null
-  winRate24h: number | null
-  winRate7d: number | null
-  medianRoi24h: number | null
-  medianRoi7d: number | null
-  portfolio7d: number | null
-  portfolioN7d: number | null
+  winRateNow: number | null
+  medianRoiNow: number | null
   portfolioNow: number | null
   portfolioNNow: number | null
   pumpDumpCount: number | null
@@ -77,7 +69,6 @@ export function toLeader(row: LeaderSource): LeaderRow {
     postCount: row.postCount ?? 0,
     uniqueTickers: row.uniqueTickers ?? 0,
     pricedCount: row.pricedCount ?? 0,
-    portfolioN7d: row.portfolioN7d ?? 0,
     portfolioNNow: row.portfolioNNow ?? 0,
     pumpDumpCount: row.pumpDumpCount ?? 0,
     sampleSize: row.sampleSize ?? 0,

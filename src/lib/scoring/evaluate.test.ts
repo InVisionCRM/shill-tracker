@@ -141,5 +141,6 @@ function mention(symbol: string, roi7d: number, flag: boolean, createdAt = 1, id
     pumpDumpFlag: flag,
     pumpDumpScore: flag ? 70 : 10,
     priceAt: 1,
+    priceNow: 1 + roi7d,
   }
 }

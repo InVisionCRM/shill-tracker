@@ -108,9 +108,9 @@ export default function MethodologyPage() {
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">5. Voice scores</h2>
         <p className="text-sm leading-6">
-          Credibility uses the longest horizon that has at least {WEIGHTS.minSampleForPreferredHorizon} settled
-          calls, in the order 7d, then 24h, then 1h. It is the win rate times {WEIGHTS.credibilityWinPoints}, plus
-          the median return ramped from {pct(WEIGHTS.credibilityMedianFloor)} to {pct(WEIGHTS.credibilityMedianCeil)}{" "}
+          Every voice score uses one move per first call: (price now − price at the shill) / price at the shill.
+          A call missing either price is not scored. Credibility is the win rate times {WEIGHTS.credibilityWinPoints}, plus
+          the median move ramped from {pct(WEIGHTS.credibilityMedianFloor)} to {pct(WEIGHTS.credibilityMedianCeil)}{" "}
           for up to {WEIGHTS.credibilityMedianPoints} points, plus a cleanliness term worth up to{" "}
           {WEIGHTS.credibilityCleanPoints} as the pump-flag rate falls, plus up to {WEIGHTS.credibilitySamplePoints}{" "}
           for sample size with a prior of {WEIGHTS.credibilitySamplePrior}.

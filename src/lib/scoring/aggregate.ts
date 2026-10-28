@@ -17,6 +17,7 @@ export type StatMention = {
   pumpDumpFlag: boolean
   pumpDumpScore: number | null
   priceAt: number | null
+  priceNow?: number | null
   callKind?: string | null
   resolutionStatus?: string | null
   priceStatus?: string | null
@@ -87,7 +88,15 @@ function roiFor(mention: StatMention, horizon: HorizonKey) {
   if (horizon === "24h") return mention.roi24h
   if (horizon === "7d") return mention.roi7d
   if (horizon === "30d") return mention.roi30d
-  return mention.roiNow
+  return shillMoveOf(mention)
+}
+
+/** The app's one % move: (price now − price at the shill) / price at the shill. */
+export function shillMoveOf(mention: { priceAt: number | null; priceNow?: number | null }) {
+  const at = mention.priceAt
+  const now = mention.priceNow
+  if (at == null || now == null || !Number.isFinite(at) || !Number.isFinite(now) || at <= 0) return null
+  return (now - at) / at
 }
 
 function horizonStats(values: number[]): HorizonStats {
@@ -102,7 +111,7 @@ function horizonStats(values: number[]): HorizonStats {
 }
 
 function primaryRoi(mention: StatMention) {
-  return mention.roi7d ?? mention.roi24h ?? mention.roiNow ?? mention.roi1h ?? mention.roi30d
+  return shillMoveOf(mention)
 }
 
 export function aggregateInfluencer(
@@ -193,15 +202,8 @@ export function aggregateInfluencer(
 function chooseCredibilityHorizon(
   horizons: InfluencerAggregate["horizons"],
 ): InfluencerAggregate["credibilityHorizon"] {
-  for (const key of ["7d", "24h", "1h"] as const) {
-    if (horizons[key].portfolioN >= WEIGHTS.minSampleForPreferredHorizon) return key
-  }
-  const ranked = (["7d", "24h", "1h"] as const).slice().sort(
-    (a, b) => horizons[b].portfolioN - horizons[a].portfolioN,
-  )
-  if (horizons[ranked[0]].portfolioN > 0) return ranked[0]
-  if (horizons.now.portfolioN > 0) return "now"
-  return null
+  // Scores use only the shill-to-now move. No 7d/24h fallback.
+  return horizons.now.portfolioN > 0 ? "now" : null
 }
 
 function nums(mentions: StatMention[], horizon: HorizonKey) {

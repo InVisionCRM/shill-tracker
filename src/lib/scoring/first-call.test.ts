@@ -19,6 +19,7 @@ function m(id: string, symbol: string, day: number, roi7d: number | null, extra:
     pumpDumpFlag: false,
     pumpDumpScore: null,
     priceAt: roi7d == null ? null : 1,
+    priceNow: roi7d == null ? null : 1 + roi7d,
     callKind: "call",
     resolutionStatus: "resolved",
     priceStatus: roi7d == null ? "pending" : "complete",
@@ -33,12 +34,12 @@ describe("first call per (voice, asset)", () => {
     expect(firsts.map((row) => row.id).sort()).toEqual(["a", "d"])
   })
 
-  it("scores only first calls: repeats never move win rate, ROI, or the $100 book", () => {
+  it("scores only first calls: repeats never move win rate, ROI, or the $100 book (shill-to-now move only)", () => {
     const rows = [m("a", "NET", 1, -0.2), m("b", "NET", 5, 3), m("c", "NET", 9, 2), m("d", "HEX", 2, 0.1)]
     const agg = aggregateInfluencer(rows, "first")
-    expect(agg.horizons["7d"].portfolioN).toBe(2)
-    expect(agg.horizons["7d"].winRate).toBe(0.5)
-    expect(agg.horizons["7d"].portfolio).toBeCloseTo(100 * 0.8 + 100 * 1.1)
+    expect(agg.horizons.now.portfolioN).toBe(2)
+    expect(agg.horizons.now.winRate).toBe(0.5)
+    expect(agg.horizons.now.portfolio).toBeCloseTo(100 * 0.8 + 100 * 1.1)
     expect(agg.shillCount).toBe(2)
     expect(agg.repeatAssets).toBe(1)
   })
@@ -46,14 +47,14 @@ describe("first call per (voice, asset)", () => {
   it("never lets a repeat stand in for an unverifiable first call", () => {
     const rows = [m("a", "NET", 1, null, { priceStatus: "unverifiable" }), m("b", "NET", 5, 3)]
     const agg = aggregateInfluencer(rows, "first")
-    expect(agg.horizons["7d"].portfolioN).toBe(0)
+    expect(agg.horizons.now.portfolioN).toBe(0)
     expect(agg.bestMentionId).toBeNull()
   })
 
   it("ignores retro brags when picking the first call", () => {
     const rows = [m("a", "NET", 1, null, { callKind: "retro_brag", priceStatus: "excluded" }), m("b", "NET", 5, 0.4)]
     const agg = aggregateInfluencer(rows, "first")
-    expect(agg.horizons["7d"].portfolioN).toBe(1)
+    expect(agg.horizons.now.portfolioN).toBe(1)
     expect(agg.bestMentionId).toBe("b")
   })
 
@@ -68,7 +69,7 @@ describe("first call per (voice, asset)", () => {
     const backfilled = [...live, m("a", "NET", 1, -0.5)]
     const agg = aggregateInfluencer(backfilled, "first")
     expect(agg.bestMentionId).toBe("a")
-    expect(agg.horizons["7d"].portfolioN).toBe(1)
+    expect(agg.horizons.now.portfolioN).toBe(1)
   })
 
   it("SQL first-call set uses the same identity and order as firstCalls()", () => {
@@ -78,5 +79,21 @@ describe("first call per (voice, asset)", () => {
     expect(text).toMatch(/'sym:' \|\| upper\(fm\.symbol\)/)
     expect(text).toMatch(/fm\.call_kind = 'call'/)
     expect(text).toMatch(/fm\.created_at asc, fm\.id asc/)
+  })
+})
+
+describe("one % only", () => {
+  it("scores (price now - price at shill) / price at shill and ignores stored 7d/24h returns", () => {
+    const row = m("a", "NET", 1, 5, { priceAt: 2, priceNow: 1, roi24h: 9 })
+    const agg = aggregateInfluencer([row], "first")
+    expect(agg.credibilityHorizon).toBe("now")
+    expect(agg.horizons.now.medianRoi).toBeCloseTo(-0.5)
+  })
+
+  it("does not score a call without both prices", () => {
+    const row = m("a", "NET", 1, 0.3, { priceNow: null })
+    const agg = aggregateInfluencer([row], "first")
+    expect(agg.horizons.now.portfolioN).toBe(0)
+    expect(agg.credibilityHorizon).toBeNull()
   })
 })

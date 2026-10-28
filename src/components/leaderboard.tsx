@@ -28,9 +28,9 @@ import { VoiceAvatar } from "./voice-avatar"
 const SORTS = [
   { value: "credibility", label: "Credibility" },
   { value: "dump", label: "Dump risk" },
-  { value: "median7", label: "Median 7d" },
-  { value: "win7", label: "Win rate 7d" },
-  { value: "portfolio", label: "$100 book, 7d" },
+  { value: "median7", label: "Median move" },
+  { value: "win7", label: "Win rate" },
+  { value: "portfolio", label: "$100 per call, now" },
   { value: "shills", label: "Shills" },
   { value: "followers", label: "Followers" },
 ] as const
@@ -115,7 +115,7 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
           <Link
             key={row.id}
             href={`/influencers/${row.username}`}
-            className={`glass-card w-[86%] shrink-0 snap-center rounded-2xl p-4 ${glowClass(row.medianRoi7d)}`}
+            className={`glass-card w-[86%] shrink-0 snap-center rounded-2xl p-4 ${glowClass(row.medianRoiNow)}`}
           >
             <div className="flex items-center gap-3">
               <VoiceAvatar src={row.profileImageUrl} username={row.username} className="size-12" />
@@ -140,9 +140,9 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
                   {row.dumpRiskScore == null ? "—" : Math.round(row.dumpRiskScore)}
                 </span>
               </span>
-              <span className={roiClass(row.medianRoi7d)}>
-                <span className="block text-[10px] tracking-wide text-muted-foreground uppercase">Median 7d</span>
-                <span className="font-mono">{formatRoi(row.medianRoi7d)}</span>
+              <span className={roiClass(row.medianRoiNow)}>
+                <span className="block text-[10px] tracking-wide text-muted-foreground uppercase">Median move</span>
+                <span className="font-mono">{formatRoi(row.medianRoiNow)}</span>
               </span>
               <span>
                 <span className="block text-[10px] tracking-wide text-muted-foreground uppercase">Shills</span>
@@ -164,16 +164,16 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
               <TableHead className="text-right">Followers</TableHead>
               <TableHead className="text-right">Shills</TableHead>
               <TableHead className="hidden text-right md:table-cell">Unique</TableHead>
-              <TableHead className="text-right">Win 7d</TableHead>
-              <TableHead className="text-right">Median 7d</TableHead>
-              <TableHead className="hidden text-right lg:table-cell">$100 / 7d</TableHead>
+              <TableHead className="text-right">Win rate</TableHead>
+              <TableHead className="text-right">Median move</TableHead>
+              <TableHead className="hidden text-right lg:table-cell">$100 per call, now</TableHead>
               <TableHead className="text-right">Dump risk</TableHead>
               <TableHead className="text-right">Credibility</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.map((row, index) => (
-              <TableRow key={row.id} className={rowGlowClass(row.medianRoi7d)}>
+              <TableRow key={row.id} className={rowGlowClass(row.medianRoiNow)}>
                 <TableCell className="font-mono text-muted-foreground">
                   <RankMark index={index} delta={deltas.get(row.id) ?? 0} reduce={reduce} />
                 </TableCell>
@@ -190,12 +190,12 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
                 <TableCell className="text-right font-mono tabular-nums">{formatCompact(row.followersCount)}</TableCell>
                 <TableCell className="text-right font-mono tabular-nums">{row.shillCount}</TableCell>
                 <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">{row.uniqueTickers}</TableCell>
-                <TableCell className="text-right font-mono tabular-nums">{formatRoi(row.winRate7d, 0)}</TableCell>
-                <TableCell className={`text-right font-mono tabular-nums ${roiClass(row.medianRoi7d)}`}>
-                  {formatRoi(row.medianRoi7d)}
+                <TableCell className="text-right font-mono tabular-nums">{formatRoi(row.winRateNow, 0)}</TableCell>
+                <TableCell className={`text-right font-mono tabular-nums ${roiClass(row.medianRoiNow)}`}>
+                  {formatRoi(row.medianRoiNow)}
                 </TableCell>
                 <TableCell className="hidden text-right font-mono tabular-nums lg:table-cell">
-                  {row.portfolio7d == null ? "—" : formatUsd(row.portfolio7d)}
+                  {row.portfolioNow == null ? "—" : formatUsd(row.portfolioNow)}
                 </TableCell>
                 <TableCell className={`text-right font-mono tabular-nums ${dumpTone(row.dumpRiskScore)}`}>
                   {row.dumpRiskScore == null ? "—" : Math.round(row.dumpRiskScore)}
@@ -254,9 +254,9 @@ function compare(a: LeaderRow, b: LeaderRow, sort: SortKey) {
   const value = (row: LeaderRow) => {
     if (sort === "credibility") return row.credibilityScore
     if (sort === "dump") return row.dumpRiskScore
-    if (sort === "median7") return row.medianRoi7d
-    if (sort === "win7") return row.winRate7d
-    if (sort === "portfolio") return row.portfolio7d
+    if (sort === "median7") return row.medianRoiNow
+    if (sort === "win7") return row.winRateNow
+    if (sort === "portfolio") return row.portfolioNow
     if (sort === "shills") return row.shillCount
     return row.followersCount
   }
