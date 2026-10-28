@@ -20,10 +20,9 @@ export default function MethodologyPage() {
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">1. What counts as a mention</h2>
         <p className="text-sm leading-6">
-          Cashtags like $SOL, a short list of unmistakable coin names (bitcoin, ethereum, solana, dogwifhat…),
-          EVM contracts (0x plus 40 hex characters), and Solana mints (32–44 base58 characters with mixed case and a
-          digit). Dollar amounts and words like $NFA are ignored. Near, link, and atom are cashtag-only so ordinary
-          sentences do not become trades.
+          Cashtags like $PLSX, a short list of coin names, EVM contracts (0x plus 40 hex characters), and Solana
+          mints (32–44 base58 characters with mixed case and a digit). Dollar amounts and words like $NFA are
+          ignored. Near, link, and atom are cashtag-only so ordinary sentences do not become trades.
         </p>
         <p className="text-sm leading-6">
           Mentions in one post that resolve to the same asset collapse into a single call. A post that names two
@@ -34,23 +33,21 @@ export default function MethodologyPage() {
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">2. Which asset</h2>
         <p className="text-sm leading-6">
-          Canonical large caps resolve immediately to a CoinGecko id and, where one exists, a Binance USDT pair.
-          Everything else waits for CoinGecko search plus market cap, then DexScreener liquidity. The biggest market
-          cap wins. Confidence is high when the leader is at least 5× the runner-up and above $5M, medium when the
-          lead is at least 2× and above $1M, and low when the field is crowded.           An 0x contract is not assumed to be Ethereum. A `chain:0x` prefix, a hashtag, “on base”, or an explorer
-          link is a chain hint and beats the default. Otherwise pair lookup checks PulseChain first, then Ethereum,
-          Base, BSC, and other EVM chains. A dust PulseChain pool does not hide a deeper market. $PDAI, PulseChain
-          $BEAR, and HEX follow a curated map: HEX before 13 May 2023 is Ethereum, and later HEX is PulseChain unless
-          the post says eHEX or ETH. Low-confidence picks are marked ambiguous. A contract with no liquidity is dead.
-          If it had a verifiable entry, the mark is −100%. If it never had one, the price is unverifiable and is left
-          out of ROI. Only posts classified as calls are scored. Recaps, commentary, warnings, and jokes stay in the
-          feed and are greyed out. A thin book stays low confidence and is badged in the UI. A PulseChain-focused
-          voice resolves HEX, PLS, PLSX, INC, and PDAI to PulseChain pools instead of the same symbol on another
-          chain. HEX on every other voice is the Ethereum listing. The chain is shown next to the ticker. A local
-          PulseChain directory, copied in with `npm run import:pulsechain`, ranks other PulseChain symbols by
-          liquidity, supplies logos, and picks the PulseX pair that existed at the post for reserve pricing. A
-          token whose pools are missing or have no liquidity is dead. The app does not connect to the source
-          database at runtime.
+          PulseChain tickers only. An 0x contract is checked against a local PulseChain directory first, then
+          DexScreener and GeckoTerminal filtered to PulseChain pairs only — no other chain is ever a candidate,
+          however liquid its market. A symbol goes through the same directory, then the PulseChain explorer&apos;s
+          most-held token with that symbol, then a DexScreener search restricted to PulseChain. Confidence is high
+          above $100k of pair liquidity, medium above $20k, and low below that. $PDAI and PulseChain $BEAR follow a
+          curated map (GeckoTerminal swaps their names and symbols). HEX follows a curated map too: HEX after 13 May
+          2023 defaults to the PulseChain pool unless the post says eHEX or ETH, and HEX before that date, or any
+          post that says eHEX or ETH, is the Ethereum listing — which is rejected and never scored, since Ethereum
+          HEX is not a PulseChain ticker. A contract with no PulseChain pair, or no liquidity, is dead. If it had a
+          verifiable entry, the mark is −100%. If it never had one, the price is unverifiable and is left out of
+          ROI. Only posts classified as calls are scored. Recaps, commentary, warnings, and jokes stay in the feed
+          and are greyed out. A thin book stays low confidence and is badged in the UI. A local PulseChain
+          directory, copied in with `npm run import:pulsechain`, ranks PulseChain symbols by liquidity, supplies
+          logos, and picks the PulseX pair that existed at the post for reserve pricing. The app does not connect
+          to the source database at runtime.
         </p>
       </section>
 
@@ -60,13 +57,12 @@ export default function MethodologyPage() {
           The entry is the last candle at or before the post. If that candle is more than 36 hours away, the print
           is missing rather than guessed. The same rule fills +1h, +24h, +7d, and +30d once those clocks have
           passed. Horizons that are not due yet stay blank. Max gain and max drawdown use candles strictly after
-          the post until 30 days later or now, whichever comes first. Current marks refresh from Binance 24h
-          tickers, CoinGecko simple price, or DexScreener, and they can extend the excursion only inside that 30
-          day window.
+          the post until 30 days later or now, whichever comes first. Current marks refresh from DexScreener, and
+          they can extend the excursion only inside that 30 day window.
         </p>
         <p className="text-sm leading-6">
-          Majors use Binance 1h klines, then CoinGecko range if Binance has no pair. Contracts use GeckoTerminal
-          hourly pool OHLCV. Returns are exit / entry − 1. There is no fee and no slippage model.
+          PulseX reserves at the post&apos;s block price it exactly, at any age. GeckoTerminal hourly pool OHLCV
+          fills the rest. Returns are exit / entry − 1. There is no fee and no slippage model.
         </p>
       </section>
 
@@ -137,10 +133,10 @@ export default function MethodologyPage() {
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">6. What the labels mean</h2>
         <p className="text-sm leading-6">
-          SEED is an illustrative path shipped with the demo voices. BINANCE, COINGECKO, and GECKOTERMINAL are live
-          or historical prints from those public APIs. Pinned demo calls are not overwritten by the price cron.
-          Pending calls are waiting on a lookup. Low confidence means the symbol was ambiguous and the winner was
-          not obvious.
+          SEED is an illustrative path shipped with the demo voices. PULSEX and GECKOTERMINAL are live or
+          historical prints from PulseChain reserves and that public API. Pinned demo calls are not overwritten by
+          the price cron. Pending calls are waiting on a lookup. Low confidence means the symbol was ambiguous and
+          the winner was not obvious.
         </p>
       </section>
     </article>
