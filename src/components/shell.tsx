@@ -59,7 +59,7 @@ export function AppFrame({
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-28">{children}</main>
         <TokenDock />
         <footer className="mb-16 border-t py-6 text-center text-xs text-muted-foreground md:mb-0">
-          Calls are not advice. Seed paths are labeled. Live marks come from Binance, CoinGecko, and DexScreener.
+          Calls are not advice. Seed paths are labeled. PulseChain tickers only. Live marks come from DexScreener and GeckoTerminal.
         </footer>
         <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur md:hidden pb-[env(safe-area-inset-bottom)]">
           <Suspense fallback={null}>

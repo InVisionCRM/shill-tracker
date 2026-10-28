@@ -1,5 +1,5 @@
 import { CASHTAG_DENY, NAME_TO_SYMBOL } from "./assets"
-import { chainFromPrefix, contextFromText, isPersonDescriptor, nameIsTickerContext, HASHTAG_DENY } from "./context"
+import { chainFromPrefix, contextFromText, isOffPulseChain, isPersonDescriptor, nameIsTickerContext, HASHTAG_DENY } from "./context"
 import type { CallKind } from "./kinds"
 import { lookupOverride } from "./overrides"
 import { dexUrl, pulseAsset } from "./pulse"
@@ -249,36 +249,43 @@ export function identifyFast(
   }
 
   if (match.symbol) {
+    const chain = match.chain ?? chainHint
+    const offChain = isOffPulseChain(chain)
     return {
       ...match,
       assetName: null,
       coingeckoId: null,
       binanceSymbol: null,
-      chain: match.chain ?? chainHint,
+      chain,
       confidence: "low",
-      confidenceReason:
-        match.matchType === "hashtag"
+      confidenceReason: offChain
+        ? `$${match.symbol} is hinted at ${chain}, not PulseChain, so this call is rejected and never scored.`
+        : match.matchType === "hashtag"
           ? `#${match.symbol} is a candidate ticker. It counts only if it resolves to a known or listed asset.`
           : `$${match.symbol} is waiting on a PulseChain listing. Off-chain tickers never resolve.`,
-      resolutionStatus: "pending",
+      resolutionStatus: offChain ? "rejected" : "pending",
     }
   }
 
+  const chain =
+    match.chain ??
+    (match.matchType === "solana" ? "solana" : match.matchType === "evm" ? (chainHint ?? "unknown-evm") : chainHint)
+  const offChain = isOffPulseChain(chain)
   return {
     ...match,
     assetName: null,
     coingeckoId: null,
     binanceSymbol: null,
     confidence: "low",
-    confidenceReason: match.chain
-      ? `Contract is prefixed ${match.chain}. The chain is stored and the pair lookup stays on that chain.`
-      : match.matchType === "solana"
-        ? "Solana mint detected. Waiting on DexScreener for the most liquid pair."
-        : "EVM contract detected. Chain stays unknown-evm until a pair lookup checks PulseChain, then Ethereum, Base, and BSC.",
-    chain:
-      match.chain ??
-      (match.matchType === "solana" ? "solana" : match.matchType === "evm" ? (chainHint ?? "unknown-evm") : chainHint),
-    resolutionStatus: "pending",
+    confidenceReason: offChain
+      ? `Contract is hinted at ${chain}, not PulseChain, so this call is rejected and never scored.`
+      : match.chain
+        ? `Contract is prefixed ${match.chain}. The chain is stored and the pair lookup stays on that chain.`
+        : match.matchType === "solana"
+          ? "Solana mint detected, but PulseChain is EVM only, so this never resolves."
+          : "EVM contract detected. Chain stays unknown-evm until a pair lookup checks PulseChain.",
+    chain,
+    resolutionStatus: offChain ? "rejected" : "pending",
   }
 }
 

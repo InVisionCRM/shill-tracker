@@ -93,6 +93,11 @@ export function chainFromPrefix(prefix: string) {
   return CHAIN_PREFIX[key] ?? key
 }
 
+/** PulseChain tickers only: a definite chain hint for anywhere else, so resolution never waits on it. */
+export function isOffPulseChain(chain: string | null | undefined) {
+  return Boolean(chain) && chain !== "pulsechain" && chain !== "unknown-evm"
+}
+
 /** Bare chain names need a buy-ish verb. "on Solana" and "spending eth" are not calls. */
 export function nameIsTickerContext(text: string, index: number, raw: string) {
   const word = raw.toLowerCase()
