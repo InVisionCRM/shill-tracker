@@ -98,7 +98,12 @@ export async function runPriceJob(options?: {
         set price_status = 'pending', price_error = null, updated_at = now()
         where price_status = 'unverifiable'
           and price_at is null
-          and price_error ~* '(429 |429$|cooldown|abort|timeout|timed out)'
+          and (
+            price_error ~* '(429 |429$|cooldown|abort|timeout|timed out)'
+            -- One-off window: before bfe3f62 an exhausted RPC retry returned null and read as "no pair".
+            or (price_error ilike '%pulsex pair%'
+                and updated_at between '2026-10-27T23:55:00Z' and '2026-10-28T00:35:00Z')
+          )
       `)
       const pulseResolved = await applyPulseBias()
       detail.resolved = pulseResolved
