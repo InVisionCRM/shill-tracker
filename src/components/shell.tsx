@@ -4,7 +4,7 @@ import { Search } from "lucide-react"
 import type { FeedDTO, QuoteDTO } from "@/lib/types"
 import { Clock } from "./animated-number"
 import { LiveProvider } from "./live-provider"
-import { BottomTabs, LiveDot, NavFallback, NavLinks, PricingBar, Tape } from "./shell-client"
+import { BottomTabs, LiveDot, NavFallback, NavLinks, PricingBar } from "./shell-client"
 import { TrackVoiceButton } from "./track-voice-button"
 
 export function AppFrame({
@@ -53,7 +53,6 @@ export function AppFrame({
               <NavLinks />
             </Suspense>
           </nav>
-          <Tape />
           <PricingBar />
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-28">{children}</main>

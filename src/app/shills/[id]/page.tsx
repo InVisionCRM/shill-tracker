@@ -9,7 +9,7 @@ import { PostText } from "@/components/post-text"
 import { RelativeTime } from "@/components/animated-number"
 import { MarkPrice, MarkRoi } from "@/components/mark"
 import { VoiceAvatar } from "@/components/voice-avatar"
-import { OutcomeFlare } from "@/components/outcome-flare"
+import { Outcome } from "@/components/outcome"
 import { TokenLogo } from "@/components/token-logo"
 import { MentionTags, mentionMuted } from "@/components/mention-tags"
 import { chainLabel, formatRoi, formatUsd, roiClass, shortAddress } from "@/lib/format"
@@ -48,7 +48,6 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <div className={`relative flex flex-col gap-6 ${mentionMuted(mention.callKind, mention.priceStatus)}`}>
-      <OutcomeFlare roi={mention.roi7d ?? mention.roiNow} />
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-3">
           <TokenLogo symbol={mention.symbol} chain={mention.chain} imageUrl={imageUrl} className="size-12" />
@@ -69,8 +68,10 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {voice.isDemo ? <Badge variant="outline">Demo</Badge> : <Badge>Live</Badge>}
+        <Outcome row={mention} size="xl" />
+      </header>
+      <div className="flex flex-wrap gap-2">
+          {voice.isDemo ? <Badge variant="outline">Demo</Badge> : null}
           <Badge variant="outline">{mention.confidence} confidence</Badge>
           <Badge variant="secondary">
             {mention.priceStatus === "unverifiable" ? "Unverifiable" : (mention.priceSource ?? mention.priceStatus)}
@@ -81,9 +82,8 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
             assetState={mention.assetState}
             resolutionConfidence={mention.resolutionConfidence}
           />
-          {mention.pumpDumpFlag ? <Badge variant="destructive" className="dump-glow">Pump-then-dump</Badge> : null}
-        </div>
-      </header>
+          {mention.pumpDumpFlag ? <Badge variant="destructive">Pump-then-dump</Badge> : null}
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <Card>
@@ -161,7 +161,7 @@ async function Shill({ params }: { params: Promise<{ id: string }> }) {
           <Card key={label}>
             <CardHeader>
               <CardDescription>{label}</CardDescription>
-              <CardTitle className={`font-mono text-2xl tabular-nums ${roiClass(roi)}`}>
+              <CardTitle className={`font-mono text-xl font-bold tabular-nums ${roiClass(roi)}`}>
                 {formatRoi(roi)}
               </CardTitle>
             </CardHeader>

@@ -2,13 +2,12 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
+import { Outcome } from "@/components/outcome"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { formatRoi, roiClass } from "@/lib/format"
 import type { FeedDTO } from "@/lib/types"
 import { RelativeTime } from "./animated-number"
 import { useLive } from "./live-provider"
-import { MarkRoi } from "./mark"
 import { MentionTags, mentionMuted } from "./mention-tags"
 import { TokenLogo } from "./token-logo"
 import { VoiceAvatar } from "./voice-avatar"
@@ -62,7 +61,7 @@ export function FeedBoard({ initial, live = true }: { initial: FeedDTO[]; live?:
                   </Link>
                   <span className="font-mono text-xs text-muted-foreground">@{item.username}</span>
                   <RelativeTime iso={item.createdAt} />
-                  {item.influencerDemo ? <Badge variant="outline">Demo</Badge> : <Badge>Live</Badge>}
+                  {item.influencerDemo ? <Badge variant="outline">Demo</Badge> : null}
                   {item.pumpDumpFlag ? <Badge variant="destructive">Dump flag</Badge> : null}
                   {item.confidence === "low" ? <Badge variant="outline">Low confidence</Badge> : null}
                   <MentionTags
@@ -85,33 +84,16 @@ export function FeedBoard({ initial, live = true }: { initial: FeedDTO[]; live?:
                   {item.priceMatch && item.priceMatch !== "exact" ? (
                     <PriceMatchNote match={item.priceMatch} at={item.priceAtTs} className="w-auto" />
                   ) : null}
-                  <span className="text-muted-foreground">
-                    24h <span className={roiClass(item.roi24h)}>{formatRoi(item.roi24h)}</span>
-                  </span>
-                  <span className="text-muted-foreground">
-                    7d <span className={roiClass(item.roi7d)}>{formatRoi(item.roi7d)}</span>
-                  </span>
-                  <span className="text-muted-foreground">
-                    Mark{" "}
-                    <MarkRoi
-                      assetKey={item.assetKey}
-                      priceAt={item.priceAt}
-                      fallbackRoi={item.roiNow}
-                      fallbackPrice={item.priceNow}
-                      pinned={item.pinned}
-                      source={item.priceSource}
-                    />
-                  </span>
                   {item.repeatCount ? (
                     <span className="text-muted-foreground" title="Later mentions are not listed or scored">
-                      First call · mentioned {item.repeatCount} more {item.repeatCount === 1 ? "time" : "times"}
+                      Mentioned {item.repeatCount} more {item.repeatCount === 1 ? "time" : "times"}
                     </span>
                   ) : null}
-                  <Link href={`/shills/${item.id}`} className="ml-auto text-foreground hover:underline">
-                    Open call
-                  </Link>
                 </div>
               </div>
+              <Link href={`/shills/${item.id}`} aria-label={`Open the ${item.symbol ?? "call"} call`} className="shrink-0">
+                <Outcome row={item} />
+              </Link>
             </div>
           </li>
         ))}

@@ -1,7 +1,8 @@
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { TokenLogo } from "@/components/token-logo"
-import { formatCallDate, formatRoi, formatUsd, roiClass } from "@/lib/format"
+import { formatCallDate, formatUsd } from "@/lib/format"
+import { Outcome } from "@/components/outcome"
 import { PriceMatchNote } from "@/components/price-match-note"
 
 export type TimelineCall = {
@@ -35,50 +36,40 @@ export function CallTimeline({
       <div>
         <h2 className="text-xl font-semibold">First calls</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Newest first. One stop per ticker, with the entry from the first time this voice named it.
+          Newest first. Each ticker once, at its first call.
           {total > calls.length ? ` Showing ${calls.length} of ${total}.` : ""}
         </p>
       </div>
-      <ol className="relative ms-3 flex flex-col gap-3 border-s border-phosphor/40 ps-6">
-        {calls.map((call) => {
-          const roi = call.roi7d ?? call.roi24h ?? call.roiNow
-          return (
-            <li key={call.id} className="relative">
-              <span
-                className="absolute -start-[1.65rem] top-4 size-2.5 rounded-full bg-phosphor ring-4 ring-background"
-                aria-hidden
-              />
-              <Link
-                href={`/shills/${call.id}`}
-                className="flex flex-col gap-2 rounded-xl border bg-card/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <span className="flex items-center gap-2">
-                  <TokenLogo
-                    symbol={call.symbol}
-                    chain={call.chain}
-                    imageUrl={call.symbol ? logos.get(call.symbol.toUpperCase()) : null}
-                    loading="lazy"
-                    className="size-8"
-                  />
-                  <span>
-                    <span className="flex flex-wrap items-center gap-2 font-mono">
-                      {call.symbol ? `$${call.symbol}` : "—"}
-                      {call.pumpDumpFlag ? <Badge variant="destructive">Pump then dump</Badge> : null}
-                    </span>
-                    <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
-                      {formatCallDate(call.createdAt)}
-                    </span>
+      <ol className="flex flex-col gap-2">
+        {calls.map((call) => (
+          <li key={call.id}>
+            <Link
+              href={`/shills/${call.id}`}
+              className="flex items-center justify-between gap-3 rounded-xl border bg-card/70 px-3 py-3"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <TokenLogo
+                  symbol={call.symbol}
+                  chain={call.chain}
+                  imageUrl={call.symbol ? logos.get(call.symbol.toUpperCase()) : null}
+                  loading="lazy"
+                  className="size-8"
+                />
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-2 font-mono">
+                    {call.symbol ? `$${call.symbol}` : "—"}
+                    {call.pumpDumpFlag ? <Badge variant="destructive">Pump then dump</Badge> : null}
                   </span>
-                </span>
-                <span className="flex items-baseline justify-between gap-4 sm:block sm:text-right">
-                  <span className="block font-mono text-xl tabular-nums">{formatUsd(call.priceAt)}</span>
+                  <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
+                    {formatCallDate(call.createdAt)} · {formatUsd(call.priceAt)}
+                  </span>
                   <PriceMatchNote match={call.priceMatch} at={call.priceAtTs} />
-                  <span className={`font-mono text-sm ${roiClass(roi)}`}>{formatRoi(roi)}</span>
                 </span>
-              </Link>
-            </li>
-          )
-        })}
+              </span>
+              <Outcome row={call} />
+            </Link>
+          </li>
+        ))}
       </ol>
     </div>
   )

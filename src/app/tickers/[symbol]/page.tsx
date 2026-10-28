@@ -1,10 +1,9 @@
 import { Suspense } from "react"
-import Link from "next/link"
 import { connection } from "next/server"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { TokenLogo } from "@/components/token-logo"
 import { TickerBoard } from "@/components/ticker-board"
-import { chainLabel, formatCallDate, formatUsd, shortAddress } from "@/lib/format"
+import { chainLabel, shortAddress } from "@/lib/format"
 import { logosForAddresses, logosForSymbols } from "@/lib/pulsechain/lookup"
 import { getTicker } from "@/lib/queries"
 
@@ -26,7 +25,7 @@ export default function TickerPage({ params }: { params: Promise<{ symbol: strin
 async function Ticker({ params }: { params: Promise<{ symbol: string }> }) {
   await connection()
   const { symbol } = await params
-  const { query, rows, avgFirst7d, firstCalls } = await getTicker(symbol)
+  const { query, rows, firstCalls } = await getTicker(symbol)
   const earliest = firstCalls[0] ?? null
   const logoSymbol = earliest?.symbol ?? rows[0]?.mentions.symbol ?? query
   const logoChain = earliest?.chain ?? rows[0]?.mentions.chain
@@ -71,23 +70,7 @@ async function Ticker({ params }: { params: Promise<{ symbol: string }> }) {
         </Empty>
       ) : (
         <>
-          {earliest ? (
-            <Link
-              href={`/shills/${earliest.id}`}
-              className="glass-card flex flex-col gap-2 rounded-2xl p-4 sm:flex-row sm:items-end sm:justify-between"
-            >
-              <span>
-                <span className="font-mono text-xs tracking-[0.16em] text-phosphor uppercase">First call</span>
-                <span className="mt-1 block text-lg font-medium">
-                  {earliest.name} <span className="font-mono text-sm text-muted-foreground">@{earliest.username}</span>
-                </span>
-                <span className="mt-1 block font-mono text-sm text-muted-foreground">{formatCallDate(earliest.createdAt)}</span>
-              </span>
-              <span className="font-mono text-3xl tabular-nums text-phosphor">{formatUsd(earliest.priceAt)}</span>
-            </Link>
-          ) : null}
           <TickerBoard
-            avgFirst7d={avgFirst7d}
             firstCalls={firstCalls.map((call) => ({
               id: call.id,
               username: call.username,

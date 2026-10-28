@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation"
 import { Activity, Radio, ScrollText, Trophy, Users } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "cn"
-import { formatRoi, formatUsd, roiClass } from "@/lib/format"
 import { useLive } from "./live-provider"
 
 export const LINKS = [
@@ -106,28 +105,3 @@ export function PricingBar() {
   )
 }
 
-export function Tape() {
-  const { quotes } = useLive()
-  const row = quotes.length ? [...quotes, ...quotes] : []
-  if (!row.length) {
-    return <div className="h-9 border-t bg-card/40" />
-  }
-  return (
-    <div className="h-9 overflow-hidden border-t bg-card/40">
-      <div className="marquee-track flex h-full w-max items-center gap-6 pr-6">
-        {row.map((quote, index) => (
-          <Link
-            key={`${quote.assetKey}-${index}`}
-            href={`/tickers/${quote.symbol}`}
-            className="flex items-center gap-2 font-mono text-xs"
-          >
-            <span className="text-phosphor">${quote.symbol}</span>
-            <span>{formatUsd(quote.price)}</span>
-            <span className={roiClass(quote.change24h)}>{formatRoi(quote.change24h)}</span>
-            <span className="text-[10px] text-muted-foreground uppercase">{quote.source}</span>
-          </Link>
-        ))}
-      </div>
-    </div>
-  )
-}

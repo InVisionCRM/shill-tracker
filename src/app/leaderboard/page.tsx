@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { connection } from "next/server"
 import { Leaderboard } from "@/components/leaderboard"
-import { getLeaderboard, getSparklines } from "@/lib/queries"
+import { getLeaderboard } from "@/lib/queries"
 import { toLeader } from "@/lib/serialize"
 
 export const metadata = {
@@ -17,9 +17,8 @@ export default function LeaderboardPage() {
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Who called it, and who arrived after the pump.</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Credibility prefers the 7 day print once three calls have settled. Dump risk rises when the chart ran
-          before the post and faded after. Small samples are pulled toward uncertain, not innocent. Sparklines
-          are the last first-call 7 day returns. A rank that moves says how far that voice shifted after you change
-          the sort.
+          before the post and faded after. Small samples are pulled toward uncertain, not innocent. Every score uses
+          each voice&apos;s first call of a ticker only.
         </p>
       </div>
       <Suspense fallback={<div className="min-h-[100svh]" aria-hidden />}>
@@ -31,7 +30,6 @@ export default function LeaderboardPage() {
 
 async function Board() {
   await connection()
-  const [board, sparks] = await Promise.all([getLeaderboard(), getSparklines()])
-  const rows = board.map((row) => ({ ...toLeader(row), sparkline: sparks.get(row.id) ?? [] }))
+  const rows = (await getLeaderboard()).map(toLeader)
   return <Leaderboard rows={rows} />
 }

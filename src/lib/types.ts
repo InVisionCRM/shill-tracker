@@ -112,7 +112,6 @@ export type LeaderRow = {
   sampleSize: number
   repeatAssets: number
   allScores: ScoreSnapshot | null
-  sparkline?: number[]
 }
 
 export type PricingProgress = {

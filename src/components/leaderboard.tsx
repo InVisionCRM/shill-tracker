@@ -23,7 +23,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Sparkline } from "./sparkline"
 import { VoiceAvatar } from "./voice-avatar"
 
 const SORTS = [
@@ -128,7 +127,6 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
               </span>
               <RankMark index={index} delta={deltas.get(row.id) ?? 0} reduce={reduce} className="ml-auto" />
             </div>
-            <Sparkline values={row.sparkline ?? []} className="mt-3" />
             <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
               <span>
                 <span className="block text-[10px] tracking-wide text-muted-foreground uppercase">Credibility</span>
@@ -168,7 +166,6 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
               <TableHead className="hidden text-right md:table-cell">Unique</TableHead>
               <TableHead className="text-right">Win 7d</TableHead>
               <TableHead className="text-right">Median 7d</TableHead>
-              <TableHead className="hidden lg:table-cell">7d path</TableHead>
               <TableHead className="hidden text-right lg:table-cell">$100 / 7d</TableHead>
               <TableHead className="text-right">Dump risk</TableHead>
               <TableHead className="text-right">Credibility</TableHead>
@@ -196,9 +193,6 @@ export function Leaderboard({ rows }: { rows: LeaderRow[] }) {
                 <TableCell className="text-right font-mono tabular-nums">{formatRoi(row.winRate7d, 0)}</TableCell>
                 <TableCell className={`text-right font-mono tabular-nums ${roiClass(row.medianRoi7d)}`}>
                   {formatRoi(row.medianRoi7d)}
-                </TableCell>
-                <TableCell className="hidden w-36 lg:table-cell">
-                  <Sparkline values={row.sparkline ?? []} />
                 </TableCell>
                 <TableCell className="hidden text-right font-mono tabular-nums lg:table-cell">
                   {row.portfolio7d == null ? "—" : formatUsd(row.portfolio7d)}

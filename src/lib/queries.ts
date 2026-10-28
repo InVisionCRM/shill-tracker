@@ -1,7 +1,7 @@
 import { and, desc, eq, getTableColumns, ilike, inArray, or, sql } from "drizzle-orm"
 import { getDb } from "./db"
 import { influencerStats, influencers, mentions, posts, pulseTokens, quotes } from "./db/schema"
-import { assetPartition, callRankWindow, firstMentionIds, repeatCountFor } from "./scoring/call-rank"
+import { callRankWindow, firstMentionIds, repeatCountFor } from "./scoring/call-rank"
 import { downsample, type Candle } from "./scoring/evaluate"
 import type { PositionDTO, PricingProgress } from "./types"
 
@@ -225,27 +225,6 @@ export async function getInfluencer(username: string) {
     .where(and(eq(posts.influencerId, influencer.id), hasFirst))
     .orderBy(desc(posts.createdAt))
     .limit(30)
-  const mixResult = await db.execute(sql`
-    select symbol, chain, count(*)::int as n
-    from mentions
-    where influencer_id = ${influencer.id} and symbol is not null
-    group by symbol, chain
-    order by n desc
-    limit 8
-  `)
-  const weekResult = await db.execute(sql`
-    with ranked as (
-      select created_at, roi_7d, ${callRankWindow} as call_rank
-      from mentions
-      where influencer_id = ${influencer.id} and call_kind = 'call'
-    )
-    select to_char(date_trunc('week', created_at), 'YYYY-MM-DD') as week, avg(roi_7d)::float8 as roi
-    from ranked
-    where call_rank = 1 and roi_7d is not null
-    group by 1
-    order by 1 desc
-    limit 16
-  `)
   const firstResult = await db.execute(sql`
     select
       id, symbol, asset_name, asset_key, chain, created_at, price_at,
@@ -264,20 +243,6 @@ export async function getInfluencer(username: string) {
     ) firsts
     order by created_at desc
   `)
-  const repeatResult = await db.execute(sql`
-    select
-      ${assetPartition} as key,
-      max(upper(symbol)) as symbol,
-      count(*)::int as n
-    from mentions
-    where influencer_id = ${influencer.id} and symbol is not null and call_kind = 'call'
-    group by 1
-    having count(*) > 1
-    order by n desc
-    limit 8
-  `)
-  const mixRows = resultRows<{ symbol: string; chain: string | null; n: number }>(mixResult)
-  const weekRows = resultRows<{ week: string; roi: number | null }>(weekResult).reverse()
   const firstRows = resultRows<FirstCallRow>(firstResult).map(mapFirstCall)
   return {
     influencer,
@@ -286,14 +251,7 @@ export async function getInfluencer(username: string) {
     posts: postRows,
     mentionTotal,
     postTotal: postCount?.n ?? postRows.length,
-    mix: mixRows.map((row) => ({ symbol: row.symbol, chain: row.chain, count: Number(row.n) })),
-    weeks: weekRows.map((row) => ({ week: row.week, roi: row.roi == null ? null : Number(row.roi) })),
     firstCalls: firstRows,
-    repeats: resultRows<{ key: string; symbol: string; n: number }>(repeatResult).map((row) => ({
-      key: row.key,
-      symbol: row.symbol,
-      count: Number(row.n),
-    })),
   }
 }
 
@@ -640,31 +598,4 @@ export async function listTrackedForBot() {
     .from(influencers)
     .where(and(eq(influencers.tracked, true), eq(influencers.isDemo, false)))
     .orderBy(influencers.username)
-}
-
-export async function getSparklines() {
-  const db = getDb()
-  const result = await db.execute(sql`
-    select influencer_id, roi_7d
-    from (
-      select influencer_id, roi_7d, created_at,
-        row_number() over (partition by influencer_id order by created_at desc) as rn
-      from (
-        select influencer_id, roi_7d, created_at,
-          ${callRankWindow} as call_rank
-        from mentions
-        where roi_7d is not null and call_kind = 'call' and price_status is distinct from 'unverifiable'
-      ) firsts
-      where call_rank = 1
-    ) ranked
-    where rn <= 18
-    order by influencer_id, created_at asc
-  `)
-  const map = new Map<string, number[]>()
-  for (const row of resultRows<{ influencer_id: string; roi_7d: number }>(result)) {
-    const list = map.get(row.influencer_id) ?? []
-    list.push(Number(row.roi_7d))
-    map.set(row.influencer_id, list)
-  }
-  return map
 }
