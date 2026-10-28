@@ -53,6 +53,7 @@ export async function getDockTokens(limit = 300) {
       left join pulse_tokens t on upper(t.symbol) = upper(m.symbol)
       where m.id in (${firstMentionIds})
         and i.is_demo = false
+        and i.tracked = true
         and m.resolution_status not in ('unresolved', 'rejected')
         and m.symbol is not null
         and char_length(m.symbol) between 1 and 12
@@ -396,7 +397,14 @@ export async function getTicker(symbol: string) {
     .from(mentions)
     .innerJoin(influencers, eq(influencers.id, mentions.influencerId))
     .innerJoin(posts, eq(posts.id, mentions.postId))
-    .where(and(match, sql`${mentions.id} in (${firstMentionIds})`, sql`${mentions.resolutionStatus} <> 'rejected'`))
+    .where(
+      and(
+        match,
+        sql`${mentions.id} in (${firstMentionIds})`,
+        sql`${mentions.resolutionStatus} <> 'rejected'`,
+        eq(influencers.tracked, true),
+      ),
+    )
     .orderBy(desc(mentions.createdAt))
     .limit(40)
   const [count] = await db
@@ -443,7 +451,7 @@ export async function getTicker(symbol: string) {
         )
     ) firsts
     join mentions m on m.id = firsts.id
-    join influencers i on i.id = m.influencer_id
+    join influencers i on i.id = m.influencer_id and i.tracked = true
     join (
       select influencer_id, count(*)::int as n
       from mentions
@@ -553,8 +561,15 @@ export async function getFeed(limit = 40) {
     .innerJoin(influencers, eq(influencers.id, mentions.influencerId))
     .leftJoin(pulseTokens, sql`lower(${mentions.contractAddress}) = ${pulseTokens.address}`)
     // One row per (voice, asset): the first call. Repeats never reach the feed. PulseChain tickers
-    // only: a call resolved off PulseChain is rejected and never reaches the feed either.
-    .where(and(sql`${mentions.id} in (${firstMentionIds})`, sql`${mentions.resolutionStatus} <> 'rejected'`))
+    // only: a call resolved off PulseChain is rejected, and an untracked (non-PulseChain) voice is
+    // dropped entirely, so neither reaches the feed.
+    .where(
+      and(
+        sql`${mentions.id} in (${firstMentionIds})`,
+        sql`${mentions.resolutionStatus} <> 'rejected'`,
+        eq(influencers.tracked, true),
+      ),
+    )
     .orderBy(desc(mentions.createdAt))
     .limit(limit)
 }
@@ -571,7 +586,12 @@ export async function searchAll(query: string) {
   const voiceRows = await db
     .select()
     .from(influencers)
-    .where(or(ilike(influencers.username, `%${q}%`), ilike(influencers.name, `%${q}%`)))
+    .where(
+      and(
+        eq(influencers.tracked, true),
+        or(ilike(influencers.username, `%${q}%`), ilike(influencers.name, `%${q}%`)),
+      ),
+    )
     .limit(8)
   const mentionRows = await db
     .select({
@@ -590,6 +610,7 @@ export async function searchAll(query: string) {
       and(
         sql`${mentions.id} in (${firstMentionIds})`,
         sql`${mentions.resolutionStatus} <> 'rejected'`,
+        eq(influencers.tracked, true),
         or(
           ilike(mentions.symbol, `%${q}%`),
           ilike(mentions.assetName, `%${q}%`),
