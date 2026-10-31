@@ -33,11 +33,16 @@ export async function GET(request: Request) {
   const [size] = rowsOf<{ bytes: string | number }>(
     await db.execute(sql`select pg_database_size(current_database()) as bytes`),
   )
+  // Planner estimates, not count(*): full scans of the big tables kept the free Neon compute busy.
+  const estimates = rowsOf<{ relname: string; n: string | number }>(
+    await db.execute(sql`
+      select c.relname, greatest(c.reltuples, 0)::bigint as n
+      from pg_class c join pg_namespace ns on ns.oid = c.relnamespace
+      where ns.nspname = 'public' and c.relkind = 'r'
+    `),
+  )
   const counts: Record<string, number> = {}
-  for (const table of TABLES) {
-    const [row] = rowsOf<{ n: string | number }>(await db.execute(sql.raw(`select count(*)::bigint as n from "${table}"`)))
-    counts[table] = Number(row?.n ?? 0)
-  }
+  for (const table of TABLES) counts[table] = Number(estimates.find((row) => row.relname === table)?.n ?? 0)
   const queue = rowsOf<{ price_status: string; resolution_status: string; n: string | number }>(
     await db.execute(sql`
       select price_status, resolution_status, count(*)::bigint as n

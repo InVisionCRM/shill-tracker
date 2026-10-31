@@ -64,3 +64,18 @@ export function asNumber(value: unknown) {
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
+
+/**
+ * Error text for job responses and logs. Drizzle wraps driver errors as "Failed query: ...",
+ * which hides the real reason (for example Neon's quota error, SQLSTATE 53000), so append the cause.
+ */
+export function describeError(error: unknown, fallback = "failed"): string {
+  if (!(error instanceof Error)) return typeof error === "string" ? error : fallback
+  const cause = (error as { cause?: unknown }).cause
+  if (cause instanceof Error) {
+    const code = (cause as { code?: unknown }).code
+    const reason = `${cause.message}${typeof code === "string" ? ` (code ${code})` : ""}`
+    return `${error.message.slice(0, 300)} | cause: ${reason}`
+  }
+  return error.message
+}

@@ -7,6 +7,7 @@
  *   DB_DRIVER=neon-ws DATABASE_URL=... pnpm prices:backlog   # Neon over WebSocket/443 (no port 5432)
  */
 import type { Pool } from "pg"
+import { describeError } from "../src/lib/http"
 
 const maxMinutes = Number(process.env.MAX_MINUTES ?? 25)
 const passBudgetMs = Number(process.env.PASS_BUDGET_MS ?? 120_000)
@@ -99,6 +100,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : "price backlog failed")
+  console.error(describeError(error, "price backlog failed"))
   process.exit(1)
 })

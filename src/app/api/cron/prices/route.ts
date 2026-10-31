@@ -1,5 +1,5 @@
 import { connection } from "next/server"
-import { requireBearer } from "@/lib/http"
+import { describeError, requireBearer } from "@/lib/http"
 import { runPriceJob } from "@/lib/prices/job"
 
 export const maxDuration = 60
@@ -19,7 +19,7 @@ async function handle(request: Request) {
     return Response.json(result)
   } catch (error) {
     return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : "price job failed" },
+      { ok: false, error: describeError(error, "price job failed") },
       { status: 500 },
     )
   }

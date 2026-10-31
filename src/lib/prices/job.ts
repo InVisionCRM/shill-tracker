@@ -13,6 +13,7 @@ import { recomputeInfluencers } from "../stats"
 import { fetchHistory, fetchBinanceTickers, fetchCoingeckoSimple, isUnverifiable } from "./history"
 import { resolveContract, resolveSymbol } from "./resolve"
 import { hostResting } from "./http"
+import { describeError } from "@/lib/http"
 
 const dexResting = () => hostResting("api.dexscreener.com")
 
@@ -474,7 +475,7 @@ export async function runPriceJob(options?: {
     })
     return { ok: true, ...detail }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = describeError(error)
     await db.insert(cronRuns).values({
       job: "prices",
       startedAt: started,

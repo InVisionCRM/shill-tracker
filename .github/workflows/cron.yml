@@ -2,7 +2,9 @@ name: Cron
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    # Hourly, not every 30 minutes: each tick wakes the free Neon compute, which has
+    # 100 CU-hours a month. Overrunning that quota took the database offline from Oct 29.
+    - cron: "7 * * * *"
   workflow_dispatch:
 
 concurrency:
@@ -27,14 +29,14 @@ jobs:
           base="${APP_URL%/}"
           out=$(curl --fail-with-body -sS --max-time 58 -X POST \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${base}/api/cron/prices")
+            "${base}/api/cron/prices") || { echo "$out" | head -c 2000; echo; echo "price job failed"; exit 1; }
           # Vercel's login page answers 200, so require the job's JSON, not just a 2xx.
           echo "$out" | head -c 2000
           echo "$out" | grep -q '"ok":true' || { echo "price job did not return ok:true"; exit 1; }
           # Price now for every priced first call, one quote per token.
           now=$(curl --fail-with-body -sS --max-time 58 -X POST \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${base}/api/cron/now-prices")
+            "${base}/api/cron/now-prices") || { echo "$now" | head -c 1000; echo; echo "now-price refresh failed"; exit 1; }
           echo "$now" | head -c 1000
           echo "$now" | grep -q '"ok":true' || { echo "now-price refresh did not return ok:true"; exit 1; }
           # Even 30-minute buckets of the Unix epoch are the :00 UTC hour.

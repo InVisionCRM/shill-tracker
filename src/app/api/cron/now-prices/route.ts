@@ -1,5 +1,5 @@
 import { connection } from "next/server"
-import { requireBearer } from "@/lib/http"
+import { describeError, requireBearer } from "@/lib/http"
 import { refreshNowPrices } from "@/lib/prices/now"
 import { fillEntries } from "@/lib/prices/entry"
 
@@ -18,7 +18,7 @@ async function handle(request: Request) {
     const entries = left > 10_000 ? await fillEntries({ budgetMs: left, limit: 120 }) : null
     return Response.json({ ok: true, ...now, entries })
   } catch (error) {
-    return Response.json({ ok: false, error: error instanceof Error ? error.message : "now-price refresh failed" }, { status: 500 })
+    return Response.json({ ok: false, error: describeError(error, "now-price refresh failed") }, { status: 500 })
   }
 }
 
