@@ -56,10 +56,10 @@ describe("majors blocklist", () => {
   })
 
   it("picks the liquidity cutoff from the documented snapshot gap", () => {
-    // ATROPA (~$8.9M) and dOWN (~$0.88M) sit above the line; PRVX (~$0.50M) and PCOCK (~$0.45M) sit
-    // below it. See the comment on MAJOR_LIQUIDITY_USD for the snapshot this was picked from.
-    expect(MAJOR_LIQUIDITY_USD).toBe(750_000)
-    expect(880_000).toBeGreaterThan(MAJOR_LIQUIDITY_USD)
-    expect(500_000).toBeLessThan(MAJOR_LIQUIDITY_USD)
+    // Best-pair liquidity: ATROPA (~$11.8M) and dOWN (~$1.75M) sit above the line; the next pools
+    // (~$0.88M, PCOCK ~$0.77M, PRVX ~$0.74M) sit below it. See the comment on MAJOR_LIQUIDITY_USD.
+    expect(MAJOR_LIQUIDITY_USD).toBe(1_000_000)
+    expect(1_750_000).toBeGreaterThan(MAJOR_LIQUIDITY_USD)
+    expect(880_000).toBeLessThan(MAJOR_LIQUIDITY_USD)
   })
 })

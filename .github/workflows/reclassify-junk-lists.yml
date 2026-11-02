@@ -1,0 +1,29 @@
+name: Reclassify junk lists
+
+# One-time (re-runnable) backfill: posts that are a bare roll call of 4+ cashtags with no shill
+# language or chain link stop counting as a call for any ticker in them. Manual only.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reclassify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Reclassify
+        run: |
+          set -eu
+          test -n "$DATABASE_URL"
+          pnpm backfill:junk-lists

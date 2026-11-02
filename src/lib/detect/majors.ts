@@ -85,13 +85,14 @@ export const MAJOR_CONTRACTS = new Set(
 )
 
 /**
- * Picked from a live snapshot of DexScreener PulseChain liquidity on 2026-11-02 (liquidity summed
- * over each token's pairs, half credited to each side). Non-blocklisted tokens landed at ATROPA
- * ~$8.9M and dOWN ~$0.88M, then a clear gap down to PLSX ~$0.54M (already blocklisted by symbol),
- * PRVX ~$0.50M and PCOCK ~$0.45M. $750k sits in that gap: it catches the handful of tokens trading
- * like a major regardless of name, without touching real small/mid-cap shill targets.
+ * Compared against mentions.liquidity_usd, which the price-now refresh fills with the liquidity of the
+ * token's most liquid DexScreener PulseChain pair. Picked from a live snapshot on 2026-11-02
+ * (/workspace/st-liq/liquidity_snapshot_2026-11-02.tsv, max_pair column). Outside the blocklist the
+ * deepest pools were ATROPA ~$11.8M and dOWN ~$1.75M, then a clear gap down to ㉣ ~$0.88M,
+ * PCOCK ~$0.77M, PRVX ~$0.74M and smaller. No PulseChain token is anywhere near $5M except ATROPA's
+ * single DAI pool, so $1M catches only that handful and leaves real shill targets alone.
  */
-export const MAJOR_LIQUIDITY_USD = 750_000
+export const MAJOR_LIQUIDITY_USD = 1_000_000
 
 export function isMajorSymbol(symbol: string | null | undefined) {
   if (!symbol) return false
