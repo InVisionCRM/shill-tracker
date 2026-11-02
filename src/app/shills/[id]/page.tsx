@@ -13,7 +13,7 @@ import { TokenLogo } from "@/components/token-logo"
 import { MentionTags, mentionMuted } from "@/components/mention-tags"
 import { chainLabel, shortAddress } from "@/lib/format"
 import { logosForAddresses, logosForSymbols } from "@/lib/pulsechain/lookup"
-import { getMention } from "@/lib/queries"
+import { getMention } from "@/lib/cached-queries"
 import { PriceMatchNote } from "@/components/price-match-note"
 
 export const metadata = { title: "Call", description: "One call: the post, the price when it was made, and what the token did next." }

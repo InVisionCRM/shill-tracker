@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { connection } from "next/server"
 import { Leaderboard } from "@/components/leaderboard"
-import { getLeaderboard } from "@/lib/queries"
+import { getLeaderboard } from "@/lib/cached-queries"
 import { toLeader } from "@/lib/serialize"
 
 export const metadata = {

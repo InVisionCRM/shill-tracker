@@ -12,7 +12,7 @@ import { shillMove } from "@/components/outcome"
 import { mentionMuted } from "@/components/mention-tags"
 import { formatCompact, formatRoi, roiClass } from "@/lib/format"
 import { logosForSymbols } from "@/lib/pulsechain/lookup"
-import { getInfluencer } from "@/lib/queries"
+import { getInfluencer } from "@/lib/cached-queries"
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params

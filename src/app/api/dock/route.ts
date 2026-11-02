@@ -1,5 +1,5 @@
 import { connection } from "next/server"
-import { getDockTokens } from "@/lib/queries"
+import { getDockTokens } from "@/lib/cached-queries"
 
 /** Public, read-only: every shilled token's logo for the dock. Capped and ordered busiest-first. */
 export async function GET() {

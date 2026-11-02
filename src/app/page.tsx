@@ -2,7 +2,7 @@ import { Suspense } from "react"
 import Link from "next/link"
 import { connection } from "next/server"
 import { FeedBoard } from "@/components/feed-board"
-import { getFeed } from "@/lib/queries"
+import { getFeed } from "@/lib/cached-queries"
 import { toFeed } from "@/lib/serialize"
 
 export const metadata = {

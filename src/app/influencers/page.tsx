@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { TrackVoiceButton } from "@/components/track-voice-button"
 import { VoiceAvatar } from "@/components/voice-avatar"
-import { getLeaderboard } from "@/lib/queries"
+import { getLeaderboard } from "@/lib/cached-queries"
 import { toLeader } from "@/lib/serialize"
 
 export const metadata = { title: "Voices", description: "Every X account Shill Tracker follows." }

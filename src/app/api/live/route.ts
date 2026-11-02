@@ -10,7 +10,8 @@ export async function GET() {
     // Stale quotes still render. The next poll retries.
   }
   const [quotes, latest, progress] = await Promise.all([getQuotes(), getFeed(30), getPricingProgress()])
-  return Response.json({
+  return Response.json(
+    {
     now: new Date().toISOString(),
     progress,
     quotes: quotes.map((quote) => ({
@@ -26,5 +27,8 @@ export async function GET() {
       ...item,
       createdAt: item.createdAt.toISOString(),
     })),
-  })
+    },
+    // Served from Vercel's CDN for 2 minutes, so open tabs share one database read.
+    { headers: { "Cache-Control": "public, max-age=0, s-maxage=120, stale-while-revalidate=600" } },
+  )
 }

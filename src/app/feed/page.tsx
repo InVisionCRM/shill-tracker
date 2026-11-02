@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { connection } from "next/server"
 import { FeedBoard } from "@/components/feed-board"
-import { getFeed } from "@/lib/queries"
+import { getFeed } from "@/lib/cached-queries"
 import { toFeed } from "@/lib/serialize"
 
 export const metadata = {
@@ -26,7 +26,7 @@ async function Feed() {
         <p className="font-mono text-xs tracking-[0.18em] text-phosphor uppercase">Feed</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Every shill, newest first.</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          This list polls every 12 seconds. A new ingest shows up without a refresh. Mark prices move when the live
+          This list refreshes every 2 minutes. A new ingest shows up without a refresh. Mark prices move when the live
           quote changes. Seed paths stay put.
         </p>
       </div>

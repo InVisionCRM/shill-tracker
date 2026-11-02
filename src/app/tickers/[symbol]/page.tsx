@@ -5,7 +5,7 @@ import { TokenLogo } from "@/components/token-logo"
 import { TickerBoard } from "@/components/ticker-board"
 import { chainLabel, shortAddress } from "@/lib/format"
 import { logosForAddresses, logosForSymbols } from "@/lib/pulsechain/lookup"
-import { getTicker } from "@/lib/queries"
+import { getTicker } from "@/lib/cached-queries"
 
 export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params

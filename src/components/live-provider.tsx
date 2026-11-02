@@ -54,7 +54,9 @@ export function LiveProvider({
     let stop = false
     const pull = async () => {
       try {
-        const response = await fetch("/api/live", { cache: "no-store" })
+        // Hidden tabs skip the poll. Each poll can wake the free Neon compute.
+        if (document.visibilityState === "hidden") return
+        const response = await fetch("/api/live")
         if (!response.ok) throw new Error("live feed unavailable")
         const body = (await response.json()) as {
           now: string
@@ -73,10 +75,16 @@ export function LiveProvider({
       }
     }
     void pull()
-    const timer = window.setInterval(pull, 12_000)
+    // Two minutes, matching the CDN cache on /api/live. Twelve-second polls kept the database awake.
+    const timer = window.setInterval(pull, 120_000)
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void pull()
+    }
+    document.addEventListener("visibilitychange", onVisible)
     return () => {
       stop = true
       window.clearInterval(timer)
+      document.removeEventListener("visibilitychange", onVisible)
     }
   }, [])
 
