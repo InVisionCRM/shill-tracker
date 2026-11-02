@@ -1,1 +1,1 @@
-0009_pulsechain_voices_only
+0010_majors_blocklist
