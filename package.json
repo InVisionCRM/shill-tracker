@@ -17,7 +17,8 @@
     "smoke": "tsx scripts/smoke.ts",
     "import": "tsx scripts/import-influencer.ts",
     "import:pulsechain": "tsx scripts/import-pulsechain-directory.ts",
-    "prices:backlog": "tsx scripts/price-backlog.ts"
+    "prices:backlog": "tsx scripts/price-backlog.ts",
+    "backfill:junk-lists": "tsx scripts/reclassify-junk-lists.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

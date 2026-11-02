@@ -1,6 +1,7 @@
 import { CASHTAG_DENY, NAME_TO_SYMBOL } from "./assets"
-import { chainFromPrefix, contextFromText, isOffPulseChain, isPersonDescriptor, nameIsTickerContext, HASHTAG_DENY } from "./context"
+import { chainFromPrefix, contextFromText, hasChainLink, isOffPulseChain, isPersonDescriptor, nameIsTickerContext, HASHTAG_DENY, SHILL_LANGUAGE } from "./context"
 import type { CallKind } from "./kinds"
+import { isMajorContract, isMajorSymbol } from "./majors"
 import { lookupOverride } from "./overrides"
 import { dexUrl, pulseAsset } from "./pulse"
 
@@ -189,6 +190,30 @@ export function identifyFast(
   match: RawMatch,
   options?: { chainBias?: string | null; text?: string | null; postedAt?: number | Date | null; chainHint?: string | null } | number,
 ): IdentifiedMatch {
+  return applyMajorsBlocklist(identifyFastCore(match, options))
+}
+
+/**
+ * Majors and stablecoins never count as a shill (BTC, PLS, HEX, stables, …), no matter how they
+ * resolved. This runs after identification so chain/contract/name stay correct for display; only
+ * resolutionStatus flips, the same signal an off-chain mention already uses to disappear everywhere.
+ */
+function applyMajorsBlocklist(result: IdentifiedMatch): IdentifiedMatch {
+  if (result.resolutionStatus === "rejected") return result
+  if (!isMajorSymbol(result.symbol) && !isMajorContract(result.contractAddress)) return result
+  const label = result.symbol ? `$${result.symbol}` : result.contractAddress
+  return {
+    ...result,
+    resolutionStatus: "rejected",
+    confidence: "high",
+    confidenceReason: `${label} is a major or stablecoin. Those never count as a shill, however it was mentioned.`,
+  }
+}
+
+function identifyFastCore(
+  match: RawMatch,
+  options?: { chainBias?: string | null; text?: string | null; postedAt?: number | Date | null; chainHint?: string | null } | number,
+): IdentifiedMatch {
   const chainBias = typeof options === "number" ? null : options?.chainBias
   const text = typeof options === "number" ? "" : (options?.text ?? "")
   const postedAt = typeof options === "number" ? null : options?.postedAt
@@ -251,18 +276,23 @@ export function identifyFast(
   if (match.symbol) {
     const chain = match.chain ?? chainHint
     const offChain = isOffPulseChain(chain)
+    // A contract already linked to this cashtag (linkSamePost/linkNearbyPosts), a DexScreener/PulseX/
+    // scan link in the post, or real shill language all beat a bare cashtag guess.
+    const strongerEvidence = Boolean(match.contractAddress) || hasChainLink(text) || SHILL_LANGUAGE.test(text)
     return {
       ...match,
       assetName: null,
       coingeckoId: null,
       binanceSymbol: null,
       chain,
-      confidence: "low",
+      confidence: !offChain && strongerEvidence ? "medium" : "low",
       confidenceReason: offChain
         ? `$${match.symbol} is hinted at ${chain}, not PulseChain, so this call is rejected and never scored.`
         : match.matchType === "hashtag"
           ? `#${match.symbol} is a candidate ticker. It counts only if it resolves to a known or listed asset.`
-          : `$${match.symbol} is waiting on a PulseChain listing. Off-chain tickers never resolve.`,
+          : strongerEvidence
+            ? `$${match.symbol} comes with a contract, a dex/scan link, or shill language, not just a bare cashtag.`
+            : `$${match.symbol} is waiting on a PulseChain listing. Off-chain tickers never resolve.`,
       resolutionStatus: offChain ? "rejected" : "pending",
     }
   }
@@ -276,7 +306,8 @@ export function identifyFast(
     assetName: null,
     coingeckoId: null,
     binanceSymbol: null,
-    confidence: "low",
+    // A contract address is itself stronger evidence than a bare cashtag.
+    confidence: offChain ? "low" : "medium",
     confidenceReason: offChain
       ? `Contract is hinted at ${chain}, not PulseChain, so this call is rejected and never scored.`
       : match.chain

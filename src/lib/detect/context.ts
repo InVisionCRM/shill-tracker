@@ -64,6 +64,29 @@ export const HASHTAG_DENY = new Set([
 const BUYISH =
   /\b(buy|bought|buying|ape|aping|aped|long|entry|bid|bidding|load|loading|loaded|accumulat\w*|swap|swapping|hold|holding|bag|bags|breaking out)\b/i
 
+/**
+ * Words that signal an actual shill rather than a bare ticker mention. Used to raise confidence
+ * on a bare cashtag and to tell a real call apart from a junk list of tickers (see classifyPost).
+ */
+export const SHILL_LANGUAGE =
+  /\b(buy|bought|buying|ape|aping|aped|long|entry|entering|bid|bidding|load|loading|loaded|accumulat\w*|swap|swapping|hold|holding|bag|bags|breaking out|gem|gems|chart|charts|moon|moonshot|bullish|undervalued|microcap|low cap)\b|send ?it|\bx\d{2,}\b|\b\d{2,}x\b/i
+
+/** A concrete contract/pair link, not just a bare cashtag guess. */
+export function hasChainLink(text: string) {
+  return /dexscreener\.com\/|geckoterminal\.com\/|pulsex\.(com|finance)|scan\.pulsechain\.com|etherscan\.io|bscscan\.com|solscan\.io|basescan\.org/i.test(
+    text,
+  )
+}
+
+const CASHTAG_SCAN = /\$[A-Za-z][A-Za-z0-9]{1,14}\b/g
+
+/** Distinct cashtags in a post, upper-cased. Cheap stand-in for a full extract pass. */
+function distinctCashtagCount(text: string) {
+  const symbols = new Set<string>()
+  for (const hit of text.matchAll(CASHTAG_SCAN)) symbols.add(hit[0].slice(1).toUpperCase())
+  return symbols.size
+}
+
 const PERSON_TAIL =
   /^\s+(maxi|maxis|holder|holders|army|gang|community|believer|believers|fan|fans|guy|guys|dude|account|bro|bros)\b/i
 
@@ -165,6 +188,12 @@ export function classifyPost(text: string): { kind: CallKind; reason: string } {
     !BUYISH.test(text)
   ) {
     return { kind: "commentary", reason: "Commentary without a buy, entry, or breakout." }
+  }
+  // A junk list of tickers ("$PLS $PLSX $HEX $INC $PRVX …") is not a shill for any of them unless
+  // the post also carries real shill language. A single contract/link still links up separately
+  // (see linkSamePost/linkNearbyPosts); this only catches the bare roll-call shape.
+  if (distinctCashtagCount(text) >= 4 && !SHILL_LANGUAGE.test(text) && !hasChainLink(text)) {
+    return { kind: "list", reason: "Four or more tickers with no shill language or link — a roll call, not a call." }
   }
   return { kind: "call", reason: "No retro, warning, or joke marker. Counted as a call." }
 }

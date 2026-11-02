@@ -1,4 +1,4 @@
-export type CallKind = "call" | "retro_brag" | "commentary" | "negative" | "joke"
+export type CallKind = "call" | "retro_brag" | "commentary" | "negative" | "joke" | "list"
 
 export function countsTowardScore(mention: {
   callKind?: string | null
@@ -21,6 +21,8 @@ export function callKindLabel(kind: string | null | undefined) {
       return "Negative"
     case "joke":
       return "Joke"
+    case "list":
+      return "List"
     default:
       return null
   }

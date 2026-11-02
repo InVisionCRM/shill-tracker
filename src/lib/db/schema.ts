@@ -105,6 +105,8 @@ export const mentions = pgTable(
     priceSource: text("price_source"),
     /** exact, nearest_candle, or nearest_daily_close. Worst match across entry and settled horizons. */
     priceMatch: text("price_match"),
+    /** Most liquid DexScreener PulseChain pair for this token, as of the last price_now refresh. */
+    liquidityUsd: doublePrecision("liquidity_usd"),
     /** Timestamp of the candle actually used for the entry price. */
     priceAtTs: timestamp("price_at_ts", { withTimezone: true }),
     priceMatches: jsonb("price_matches").$type<Partial<Record<string, { m: string; ts: number }>>>(),

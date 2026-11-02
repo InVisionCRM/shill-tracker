@@ -32,19 +32,21 @@ describe("extractMatches", () => {
     expect(matches.map((match) => match.symbol).sort()).toEqual(["HEX", "PLSX"])
   })
 
-  it("prices HEX on PulseChain for a biased voice", () => {
+  it("prices HEX on PulseChain for a biased voice, then rejects it as a blocklisted major", () => {
     const [match] = extractMatches("$HEX")
     const identified = identifyFast(match, { chainBias: "pulsechain" })
     expect(identified.chain).toBe("pulsechain")
     expect(identified.coingeckoId).toBeNull()
     expect(identified.contractAddress).toBe("0x2b591e99afe9f32eaa6214f7b7629768c40eeb39")
-    expect(identified.resolutionStatus).toBe("resolved")
     expect(identified.geckoterminalNetwork).toBe("pulsechain")
+    // Identification is still correct (chain/contract above), but HEX is on the majors blocklist:
+    // Kyle's "not bitcoin, PulseChain, or any really popular ticker" rule, so it never scores.
+    expect(identified.resolutionStatus).toBe("rejected")
   })
 
   it("does not assume an 0x contract is ethereum", () => {
-    const plsx = "0x95b303987a60c71504d99aa1b13b4da07b0790ab"
-    const [match] = extractMatches(`the pool is ${plsx}`)
+    const prvx = "0xf6f8db0aba00007681f8faf16a0fda1c9b030b11"
+    const [match] = extractMatches(`the pool is ${prvx}`)
     const identified = identifyFast(match)
     expect(identified.matchType).toBe("evm")
     expect(identified.chain).toBe("unknown-evm")
@@ -66,11 +68,11 @@ describe("extractMatches", () => {
 
 describe("collapseMatches", () => {
   it("merges a cashtag and a coin name for the same asset, and leaves it pending (PulseChain tickers only)", () => {
-    const matches = extractMatches("bitcoin and $BTC, same trade").map(identifyFast)
+    const matches = extractMatches("arbitrum and $ARB, same trade").map(identifyFast)
     const collapsed = collapseMatches(matches)
     expect(collapsed).toHaveLength(1)
     expect(collapsed[0].coingeckoId).toBeNull()
-    expect(collapsed[0].symbol).toBe("BTC")
+    expect(collapsed[0].symbol).toBe("ARB")
     expect(collapsed[0].resolutionStatus).toBe("pending")
   })
 

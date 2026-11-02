@@ -71,6 +71,13 @@
       "when": 1793280000000,
       "tag": "0009_pulsechain_voices_only",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793290000000,
+      "tag": "0010_majors_blocklist",
+      "breakpoints": true
     }
   ]
 }

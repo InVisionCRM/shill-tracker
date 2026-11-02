@@ -170,6 +170,46 @@ describe("audit fixtures", () => {
   })
 })
 
+/**
+ * FundingGym-style account: almost every post is a daily "market update" roll call of whatever is
+ * pumping, with no shill language, and the occasional genuine call of a small PulseChain ticker.
+ * Kyle's complaint ("559 calls, almost certainly junk") is this shape — a few real calls buried in
+ * a wall of cashtag lists that used to all score as "call".
+ */
+describe("FundingGym-style junk feed", () => {
+  const FEED = [
+    "GM. Market check: $PLS $PLSX $HEX $INC $PRVX all green today",
+    "$BTC $ETH $PLS $WPLS all pumping together this morning",
+    "Watchlist for today: $PLS $HEX $INC $WPLS $PCOCK $PRVX",
+    "$HEX $PLSX $INC $PDAI update, nothing new to add",
+    "Loading more $PRVX here, chart looks ready to rip. Still accumulating.",
+    "$PLS $PLSX $HEX $INC $USDC $USDT stable day across the board",
+  ]
+
+  it("classifies five of six posts as non-calls (roll calls or blocklisted majors)", () => {
+    const kinds = FEED.map((text) => classifyPost(text).kind)
+    const callCount = kinds.filter((kind) => kind === "call").length
+    expect(callCount).toBe(1)
+    expect(kinds.filter((kind) => kind === "list").length).toBe(5)
+  })
+
+  it("the one real call (PRVX) is the only mention left counting toward score", () => {
+    const perPost = FEED.map((text) => identified(text, Date.parse("2026-10-01T12:00:00Z")))
+    const scoredSymbols = perPost.flatMap((matches) => matches.filter((match) => countsTowardScore(match)).map((match) => match.symbol))
+    expect(scoredSymbols).toEqual(["PRVX"])
+  })
+
+  it("every major/stable mentioned across the feed is rejected regardless of post shape", () => {
+    const perPost = FEED.map((text) => identified(text, Date.parse("2026-10-01T12:00:00Z")))
+    const bySymbol = new Map(perPost.flatMap((matches) => matches.map((match) => [match.symbol, match])))
+    for (const symbol of ["PLS", "PLSX", "HEX", "INC", "WPLS", "PDAI", "USDC", "USDT", "BTC", "ETH"]) {
+      expect(bySymbol.get(symbol)?.resolutionStatus).toBe("rejected")
+    }
+    // PCOCK is a real small-cap ticker in the same roll call; it stays pending, just not a "call".
+    expect(bySymbol.get("PCOCK")?.resolutionStatus).toBe("pending")
+  })
+})
+
 describe("dead assets and reserve math", () => {
   it("scores a dead call at -100% from a real entry and unverifiable without one", () => {
     const postedAt = Date.parse("2024-06-01T00:00:00Z")

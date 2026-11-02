@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm"
 import { getDb } from "../db"
+import { MAJOR_LIQUIDITY_USD } from "../detect/majors"
 import { firstMentionIds } from "../scoring/call-rank"
 import { dexChainId, fetchBinanceTickers, fetchCoingeckoSimple, fetchDexTokensOnChain } from "./history"
 import { onchainSeries } from "./onchain"
@@ -23,6 +24,7 @@ export type NowSummary = {
   bySource: Record<string, number>
   missing: number
   rowsUpdated: number
+  rejectedForLiquidity: number
   stoppedBy: "done" | "budget"
   ms: number
 }
@@ -67,6 +69,9 @@ export async function nowTokens(limit: number): Promise<Token[]> {
       -- are never-resolved placeholders (assetKeyOf falls back to "sym:TICKER") that no API can ever
       -- answer. Without this filter they never leave the "missing" pool and crowd out real tokens.
       and price_at is not null
+      -- Already excluded (off-chain, blocklisted major, or over the liquidity cutoff): never worth
+      -- another DexScreener call.
+      and resolution_status <> 'rejected'
     group by asset_key
     having bool_or(price_now is null)
       or max(updated_at) < now() - (${STALE_MINUTES} * interval '1 minute')
@@ -197,6 +202,14 @@ export async function writeNowPrices(prices: Map<string, { price: number; liquid
       update mentions m
       set price_now = case when ${implausible} then null else v.price end,
           roi_now = case when ${implausible} then null when m.price_at > 0 then v.price / m.price_at - 1 else null end,
+          -- v.liquidity is 0 for "unknown" (on-chain reserves, no DexScreener hit) and 1e15 for the
+          -- Binance/CoinGecko infinite-liquidity sentinel; only a real DexScreener figure replaces
+          -- what is stored, so a stale miss never overwrites the last good reading. Rejection below
+          -- is one-way, so a single high reading is enough and a later dip never un-rejects it.
+          liquidity_usd = case
+            when v.liquidity > 0 and v.liquidity < 1e15 then v.liquidity
+            else m.liquidity_usd
+          end,
           updated_at = now()
       from (values ${values}) as v(asset_key, price, liquidity)
       where m.asset_key = v.asset_key
@@ -205,6 +218,30 @@ export async function writeNowPrices(prices: Map<string, { price: number; liquid
     updated += (result as { rowCount?: number }).rowCount ?? 0
   }
   return updated
+}
+
+/**
+ * Anything trading with PulseChain liquidity at or above MAJOR_LIQUIDITY_USD is excluded the same
+ * way a blocklisted major is: resolution_status = 'rejected' hides it from every list, the dock,
+ * search, and scoring (see src/lib/detect/kinds.ts countsTowardScore and src/lib/queries.ts). Runs
+ * off liquidity_usd already written by writeNowPrices above — no extra API call.
+ */
+export async function rejectHighLiquidity() {
+  const db = getDb()
+  const result = await db.execute(sql`
+    update mentions
+    set resolution_status = 'rejected',
+        price_status = 'excluded',
+        updated_at = now()
+    where resolution_status <> 'rejected'
+      and asset_key in (
+        select asset_key from mentions
+        where chain = 'pulsechain'
+          and asset_key is not null
+          and liquidity_usd >= ${MAJOR_LIQUIDITY_USD}
+      )
+  `)
+  return (result as { rowCount?: number }).rowCount ?? 0
 }
 
 /**
@@ -225,6 +262,7 @@ export async function refreshNowPrices(options?: { budgetMs?: number; limit?: nu
   const prices = await fetchNowPrices(alive, deadline - 3_000)
   for (const token of dead) prices.set(token.assetKey, { price: 0, source: "dead", liquidity: null })
   const rowsUpdated = await writeNowPrices(prices)
+  const rejectedForLiquidity = await rejectHighLiquidity()
   const bySource: Record<string, number> = {}
   for (const row of prices.values()) bySource[row.source] = (bySource[row.source] ?? 0) + 1
   return {
@@ -233,6 +271,7 @@ export async function refreshNowPrices(options?: { budgetMs?: number; limit?: nu
     bySource,
     missing: tokens.length - prices.size,
     rowsUpdated,
+    rejectedForLiquidity,
     stoppedBy: Date.now() >= deadline - 3_500 ? "budget" : "done",
     ms: Date.now() - started,
   }
