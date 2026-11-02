@@ -3,6 +3,7 @@ import { chainFromPrefix, contextFromText, hasChainLink, isOffPulseChain, isPers
 import type { CallKind } from "./kinds"
 import { isMajorContract, isMajorSymbol } from "./majors"
 import { lookupOverride } from "./overrides"
+import { HASHTAG_NON_TICKERS } from "./hashtag-deny"
 import { dexUrl, pulseAsset } from "./pulse"
 
 export type MatchType = "cashtag" | "hashtag" | "name" | "evm" | "solana"
@@ -71,7 +72,7 @@ export function extractMatches(text: string, extraNames?: Record<string, string>
 
   for (const hit of text.matchAll(HASHTAG)) {
     const symbol = hit[1].toUpperCase()
-    if (HASHTAG_DENY.has(symbol) || CASHTAG_DENY.has(symbol)) continue
+    if (HASHTAG_DENY.has(symbol) || CASHTAG_DENY.has(symbol) || HASHTAG_NON_TICKERS.has(symbol)) continue
     if (symbol.length < 3) continue
     push({
       matchType: "hashtag",

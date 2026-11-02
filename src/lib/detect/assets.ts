@@ -223,6 +223,15 @@ export const CASHTAG_DENY = new Set([
   "PM",
   "AM",
   "TV",
+  // Stocks, ETFs and indexes (not crypto)
+  "TSLA", "AMZN", "AAPL", "MSFT", "GOOG", "GOOGL", "NVDA", "AMD", "INTC", "MSTR", "HOOD", "AMC", "SPY",
+  "QQQ", "IWM", "DJI", "DOW", "SOX", "PLTR", "BABA", "DIS", "SQ", "BA", "GE", "IBM", "DELL", "MARA", "RIOT",
+  "JPM", "PYPL", "TWTR", "FB", "ORCL", "NFLX", "AVGO", "CSCO", "NKE", "TSM", "RIVN", "SMCI", "GLD", "VIX",
+  "GBTC", "IBIT", "ETHE", "TM", "COIN",
+  // Fiat and forex
+  "EUR", "EURO", "GBP", "INR", "USDINR", "DXY",
+  // Text artifacts and plain words
+  "ED", "ER", "FACTS",
 ])
 
 export const CHAIN_TO_GECKOTERMINAL: Record<string, string> = {

@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, inArray, isNull, sql } from "drizzle-orm"
 import { classifyPostMaybeLlm } from "./detect/context"
 import { collapseMatches, extractMatches, identifyFast } from "./detect/extract"
 import { linkNearbyPosts, linkSamePost } from "./detect/link"
@@ -7,6 +7,7 @@ import { getDb } from "./db"
 import { influencers, mentions, posts } from "./db/schema"
 import { assetKeyOf, postUrl } from "./format"
 import { asNumber, isRecord, laterSnowflake, normalizeUsername, parseTime, textHash } from "./http"
+import { assetPartition } from "./scoring/call-rank"
 import { recomputeInfluencers } from "./stats"
 
 export type IngestResult = {
@@ -261,6 +262,19 @@ export async function ingestPosts(input: IngestPayload, options?: { deferPricing
 
     const identified = preparedPosts.get(post.id) ?? []
     for (const match of identified) {
+      // First mention only: a later mention of a ticker this voice already has is not stored. An earlier one
+      // (a backfilled older post) takes the place of the stored rows, so only the first remains.
+      const groupKey = assetKeyOf(match)
+      let replaceIds: string[] = []
+      if (groupKey) {
+        const group = await db
+          .select({ id: mentions.id, createdAt: mentions.createdAt, callKind: mentions.callKind })
+          .from(mentions)
+          .where(and(eq(mentions.influencerId, influencer.id), sql`${assetPartition} = ${groupKey}`))
+        const isCall = (match.callKind ?? "call") === "call"
+        if (!isEarlierFirst({ isCall, createdAt: post.createdAt.getTime() }, group)) continue
+        replaceIds = group.map((row) => row.id)
+      }
       const inserted = await db
         .insert(mentions)
         .values({
@@ -296,7 +310,10 @@ export async function ingestPosts(input: IngestPayload, options?: { deferPricing
         })
         .onConflictDoNothing()
         .returning({ id: mentions.id })
-      if (inserted[0]) mentionIds.push(inserted[0].id)
+      if (inserted[0]) {
+        mentionIds.push(inserted[0].id)
+        if (replaceIds.length) await db.delete(mentions).where(inArray(mentions.id, replaceIds))
+      }
     }
   }
 
@@ -396,4 +413,19 @@ export async function untrackInfluencer(username: string) {
     .returning({ id: influencers.id, username: influencers.username })
   if (!updated[0]) return { error: "tracked influencer not found" as const }
   return { influencer: updated[0] }
+}
+
+/**
+ * True when a new mention beats every stored mention of the same ticker for this voice, using the
+ * firstMentionIds() order: a call beats a non-call row, then the earlier post wins. A tie keeps what is stored.
+ */
+export function isEarlierFirst(
+  next: { isCall: boolean; createdAt: number },
+  stored: { createdAt: Date; callKind: string | null }[],
+) {
+  return stored.every((row) => {
+    const rowIsCall = (row.callKind ?? "call") === "call"
+    if (next.isCall !== rowIsCall) return next.isCall
+    return next.createdAt < row.createdAt.getTime()
+  })
 }
