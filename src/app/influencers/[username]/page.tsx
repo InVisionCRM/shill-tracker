@@ -8,6 +8,7 @@ import { RelativeTime } from "@/components/animated-number"
 import { UntrackLauncher } from "@/components/track-voice-button"
 import { VoiceAvatar } from "@/components/voice-avatar"
 import { CallTimeline } from "@/components/call-timeline"
+import { ShillTimelineChart } from "@/components/shill-timeline-chart"
 import { shillMove } from "@/components/outcome"
 import { mentionMuted } from "@/components/mention-tags"
 import { formatCompact, formatRoi, roiClass } from "@/lib/format"
@@ -99,6 +100,18 @@ async function Profile({ username, searchParams }: { username: string; searchPar
         <p className="rounded-lg border bg-card/70 px-4 py-3 text-sm text-muted-foreground">
           Loading this voice&apos;s history now. Calls will appear as the bot reads its timeline.
         </p>
+      ) : null}
+
+      {data.firstCalls.length > 0 ? (
+        <section className="flex flex-col gap-3 rounded-xl border bg-card/70 p-4">
+          <div>
+            <h2 className="text-xl font-semibold">Shill timeline</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Every first call, in order, colored by its move from the price at the shill to the price now.
+            </p>
+          </div>
+          <ShillTimelineChart calls={data.firstCalls} />
+        </section>
       ) : null}
 
       <CallTimeline calls={shownFirst} logos={logos} total={data.firstCalls.length} />
