@@ -171,6 +171,79 @@ describe("audit fixtures", () => {
 })
 
 /**
+ * @hodldog, verbatim from production: every one of these shipped a junk ticker ($STFU, $NATURE,
+ * $FACTSAFTERMIDNIGHT, $HEXISKING, $BITCOIN) that was never a real cashtag, contract, or chain link.
+ */
+describe("hodldog: hashtags and name-cashtags never become tickers", () => {
+  const POSTS = {
+    stfu: "If you cannot understand why a coin is in the top 10,\nyou need to shut the f**k up #STFU #HEX\n\nhttps://t.co/3Vrfmqv5yt",
+    nature: "All I need 🌿\n#Nature $HEX $PLS https://t.co/EpAmTcNaHG",
+    factsAfterMidnight: "$HEX is definitely not a scam, but many #Hexicans are.\n\n#FactsAfterMidnight",
+    hexIsKing: "Memo: sacrifices are a thing of the past,\nstake $HEX and collect #Tshares.\n\n#HEXisKing",
+    bitcoin:
+      "🚨 JUST IN 🚨\n\n$HEX HAS FLAWLESS OPERATION FOR 5 YEARS 👑\n\n❌NO hacks\n\nEven $Bitcoin had bugs in the past.\n\n$HEX https://t.co/ftICYrNUmr #PulseChain",
+  }
+
+  // Same filter the app uses everywhere (queries.ts: `resolution_status <> 'rejected'`) — a rejected
+  // mention still exists as a row, it just never shows up as a "$XXX price pending" chip.
+  function visibleSymbols(matches: ReturnType<typeof identified>) {
+    return matches.filter((match) => match.resolutionStatus !== "rejected").map((match) => match.symbol)
+  }
+
+  it("#STFU never becomes a $STFU ticker", () => {
+    expect(visibleSymbols(identified(POSTS.stfu))).not.toContain("STFU")
+  })
+
+  it("#Nature never becomes a $NATURE ticker", () => {
+    expect(visibleSymbols(identified(POSTS.nature))).not.toContain("NATURE")
+  })
+
+  it("#FactsAfterMidnight and #Hexicans never become tickers", () => {
+    const visible = visibleSymbols(identified(POSTS.factsAfterMidnight))
+    expect(visible).not.toContain("FACTSAFTERMIDNIGHT")
+    expect(visible).not.toContain("HEXICANS")
+  })
+
+  it("#HEXisKing and #Tshares never become tickers", () => {
+    const visible = visibleSymbols(identified(POSTS.hexIsKing))
+    expect(visible).not.toContain("HEXISKING")
+    expect(visible).not.toContain("TSHARES")
+  })
+
+  it("$Bitcoin maps to BTC and is rejected by the majors blocklist, and #PulseChain is ignored", () => {
+    const matches = identified(POSTS.bitcoin)
+    expect(matches.some((match) => match.symbol === "BITCOIN")).toBe(false)
+    expect(matches.some((match) => match.symbol === "PULSECHAIN")).toBe(false)
+    expect(visibleSymbols(matches)).not.toContain("BTC")
+    const btc = matches.find((match) => match.symbol === "BTC")
+    expect(btc?.resolutionStatus).toBe("rejected")
+  })
+
+  it("raw hashtag extraction still happens (for curated overrides), but identifyFast always rejects a bare hashtag", () => {
+    const [match] = extractMatches("#STFU is trending")
+    expect(match.matchType).toBe("hashtag")
+    const resolved = identifyFast(match)
+    expect(resolved.resolutionStatus).toBe("rejected")
+  })
+})
+
+describe("$BITCOIN/$ETHEREUM/$PULSECHAIN/$PULSEX style name-cashtags", () => {
+  it("canonicalize to their real symbol and get caught by the majors blocklist", () => {
+    for (const [raw, symbol] of [
+      ["$Bitcoin", "BTC"],
+      ["$Ethereum", "ETH"],
+      ["$Pulsechain", "PLS"],
+      ["$Pulsex", "PLSX"],
+    ] as const) {
+      const [match] = extractMatches(raw)
+      expect(match.symbol).toBe(symbol)
+      const identifiedMatch = identifyFast(match)
+      expect(identifiedMatch.resolutionStatus).toBe("rejected")
+    }
+  })
+})
+
+/**
  * FundingGym-style account: almost every post is a daily "market update" roll call of whatever is
  * pumping, with no shill language, and the occasional genuine call of a small PulseChain ticker.
  * Kyle's complaint ("559 calls, almost certainly junk") is this shape — a few real calls buried in

@@ -18,7 +18,8 @@
     "import": "tsx scripts/import-influencer.ts",
     "import:pulsechain": "tsx scripts/import-pulsechain-directory.ts",
     "prices:backlog": "tsx scripts/price-backlog.ts",
-    "backfill:junk-lists": "tsx scripts/reclassify-junk-lists.ts"
+    "backfill:junk-lists": "tsx scripts/reclassify-junk-lists.ts",
+    "backfill:hashtag-tickers": "tsx scripts/reclassify-hashtag-tickers.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

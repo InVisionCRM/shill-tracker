@@ -1,4 +1,4 @@
-import { CASHTAG_DENY, NAME_TO_SYMBOL } from "./assets"
+import { CASHTAG_DENY, CASHTAG_NAME_ALIASES, NAME_TO_SYMBOL } from "./assets"
 import { chainFromPrefix, contextFromText, hasChainLink, isOffPulseChain, isPersonDescriptor, nameIsTickerContext, HASHTAG_DENY, SHILL_LANGUAGE } from "./context"
 import type { CallKind } from "./kinds"
 import { isMajorContract, isMajorSymbol } from "./majors"
@@ -54,7 +54,9 @@ export function extractMatches(text: string, extraNames?: Record<string, string>
   }
 
   for (const hit of text.matchAll(CASHTAG)) {
-    const symbol = hit[1].toUpperCase()
+    // $Bitcoin, $Pulsechain, … are the same asset as $BTC, $PLS, …, spelled out. Canonicalize first
+    // so the majors blocklist (which only knows the real symbols) catches these the same way.
+    const symbol = CASHTAG_NAME_ALIASES[hit[1].toUpperCase()] ?? hit[1].toUpperCase()
     if (CASHTAG_DENY.has(symbol)) continue
     const index = hit.index ?? 0
     if (isPersonDescriptor(text, index, hit[0])) continue
@@ -252,6 +254,22 @@ function identifyFastCore(
     }
   }
 
+  // Hashtags (#STFU, #Nature, #FactsAfterMidnight, #HEXisKing, …) are community tags, not tickers.
+  // The only way one ever resolves is the curated override above (#Teddybear, #HEX); anything else
+  // is rejected outright instead of becoming a speculative "price pending" cashtag.
+  if (match.matchType === "hashtag") {
+    return {
+      ...match,
+      assetName: null,
+      coingeckoId: null,
+      binanceSymbol: null,
+      chain: match.chain ?? chainHint,
+      confidence: "low",
+      confidenceReason: `#${match.symbol ?? match.rawText} is a hashtag, not a cashtag, contract, or chain link. Hashtags never count as a shill on their own.`,
+      resolutionStatus: "rejected",
+    }
+  }
+
   if (chainBias === "pulsechain" && match.symbol) {
     const pulse = pulseAsset(match.symbol)
     if (pulse && pulse.symbol !== "HEX" && pulse.symbol !== "PDAI") {
@@ -288,11 +306,9 @@ function identifyFastCore(
       confidence: !offChain && strongerEvidence ? "medium" : "low",
       confidenceReason: offChain
         ? `$${match.symbol} is hinted at ${chain}, not PulseChain, so this call is rejected and never scored.`
-        : match.matchType === "hashtag"
-          ? `#${match.symbol} is a candidate ticker. It counts only if it resolves to a known or listed asset.`
-          : strongerEvidence
-            ? `$${match.symbol} comes with a contract, a dex/scan link, or shill language, not just a bare cashtag.`
-            : `$${match.symbol} is waiting on a PulseChain listing. Off-chain tickers never resolve.`,
+        : strongerEvidence
+          ? `$${match.symbol} comes with a contract, a dex/scan link, or shill language, not just a bare cashtag.`
+          : `$${match.symbol} is waiting on a PulseChain listing. Off-chain tickers never resolve.`,
       resolutionStatus: offChain ? "rejected" : "pending",
     }
   }

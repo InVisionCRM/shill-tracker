@@ -1,7 +1,10 @@
 name: Reclassify junk lists
 
-# One-time (re-runnable) backfill: posts that are a bare roll call of 4+ cashtags with no shill
-# language or chain link stop counting as a call for any ticker in them. Manual only.
+# One-time (re-runnable) backfills. Manual only.
+# 1. Posts that are a bare roll call of 4+ cashtags with no shill language or chain link stop
+#    counting as a call for any ticker in them.
+# 2. Hashtag mentions (#STFU, #Nature, …) that never resolved through a curated override, and
+#    name-cashtags of majors ($Bitcoin, $Pulsechain, …), stop counting as tickers.
 on:
   workflow_dispatch:
 
@@ -22,8 +25,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Reclassify
+      - name: Reclassify junk lists
         run: |
           set -eu
           test -n "$DATABASE_URL"
           pnpm backfill:junk-lists
+      - name: Reclassify hashtag tickers and major name-cashtags
+        run: |
+          set -eu
+          test -n "$DATABASE_URL"
+          pnpm backfill:hashtag-tickers

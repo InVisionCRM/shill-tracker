@@ -115,6 +115,22 @@ export const NAME_TO_SYMBOL: Record<string, string> = {
   chainlinktoken: "LINK",
 }
 
+/**
+ * A cashtag spelled out as the asset's full name ($BITCOIN, $ETHEREUM, $PULSECHAIN, $PULSEX, …) is
+ * the same asset as the ticker, just typed differently — map it to the real symbol so it hits the
+ * majors blocklist (majors.ts) exactly like $BTC does, instead of slipping through as an unknown
+ * "BITCOIN" symbol that is pending forever.
+ */
+export const CASHTAG_NAME_ALIASES: Record<string, string> = {
+  ...Object.fromEntries(
+    Object.entries(NAME_TO_SYMBOL)
+      .filter(([name]) => !name.includes(" "))
+      .map(([name, symbol]) => [name.toUpperCase(), symbol]),
+  ),
+  PULSECHAIN: "PLS",
+  PULSEX: "PLSX",
+}
+
 export const CASHTAG_DENY = new Set([
   "USD",
   "DOLLAR",
