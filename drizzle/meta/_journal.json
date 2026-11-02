@@ -78,6 +78,13 @@
       "when": 1793290000000,
       "tag": "0010_majors_blocklist",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793300000000,
+      "tag": "0011_requeue_pulsechain_prices",
+      "breakpoints": true
     }
   ]
 }

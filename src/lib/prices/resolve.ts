@@ -29,6 +29,7 @@ export type ResolvedAsset = {
 
 type DexPair = {
   chainId?: string
+  dexId?: string
   pairAddress?: string
   url?: string
   priceUsd?: string
@@ -78,7 +79,13 @@ export function resolveEvmContract(address: string, pairs: DexPair[]): ResolvedA
   const matching = pairs.filter(
     (pair) => baseMatches(pair, normalized) && canonicalChain(pair.chainId) === "pulsechain",
   )
-  const best = [...matching].sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0]
+  // A classic PulseX pool reads cleanly from on-chain reserves at any historical block. Some other
+  // PulseChain DEXes (concentrated-liquidity forks) report deep liquidity on DexScreener/GeckoTerminal
+  // but don't expose getReserves(), so an on-chain read of them silently comes back empty. Prefer a
+  // PulseX pair whenever one exists; only fall back to the overall deepest pair when PulseX has none.
+  const pulsexMatching = matching.filter((pair) => pair.dexId?.toLowerCase().startsWith("pulsex"))
+  const candidates = pulsexMatching.length ? pulsexMatching : matching
+  const best = [...candidates].sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0]
   const liquidity = best?.liquidity?.usd ?? 0
   if (!best || liquidity <= 0) {
     return pack({
@@ -276,7 +283,7 @@ async function loadDexPairs(address: string) {
 type GtPool = {
   id?: string
   attributes?: { address?: string; name?: string; reserve_in_usd?: string }
-  relationships?: { base_token?: { data?: { id?: string } } }
+  relationships?: { base_token?: { data?: { id?: string } }; dex?: { data?: { id?: string } } }
 }
 
 async function loadGeckoPairs(address: string): Promise<DexPair[]> {
@@ -297,6 +304,7 @@ async function loadGeckoPairs(address: string): Promise<DexPair[]> {
     const reserve = Number(pool.attributes?.reserve_in_usd)
     pairs.push({
       chainId: GT_NETWORK_TO_CHAIN[network] ?? network,
+      dexId: pool.relationships?.dex?.data?.id,
       pairAddress: pool.attributes?.address,
       url: pool.attributes?.address
         ? `https://www.geckoterminal.com/${network}/pools/${pool.attributes.address}`

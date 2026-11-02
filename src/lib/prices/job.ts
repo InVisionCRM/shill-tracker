@@ -10,7 +10,7 @@ import { assetKeyOf } from "../format"
 import { lookupOverride } from "../detect/overrides"
 import { WEIGHTS, applyAssetState, evaluateCall } from "../scoring/evaluate"
 import { recomputeInfluencers } from "../stats"
-import { fetchHistory, fetchBinanceTickers, fetchCoingeckoSimple, isUnverifiable } from "./history"
+import { fetchHistory, fetchBinanceTickers, fetchCoingeckoSimple, isUnverifiable, TRANSIENT } from "./history"
 import { resolveContract, resolveSymbol } from "./resolve"
 import { hostResting } from "./http"
 import { describeError } from "@/lib/http"
@@ -391,14 +391,24 @@ export async function runPriceJob(options?: {
         touched.add(mention.influencerId)
       } catch (error) {
         detail.failed = Number(detail.failed) + 1
-        const attempts = mention.priceAttempts + 1
+        const message = error instanceof Error ? error.message : String(error)
         const unverifiable = isUnverifiable(error)
+        // A rate limit or timeout is not proof the price is unavailable; it must not burn an attempt
+        // toward "unavailable" (see backlog.ts's runApi for the same rule).
+        const transient = !unverifiable && TRANSIENT.test(message)
+        const attempts = transient ? mention.priceAttempts : mention.priceAttempts + 1
         await db
           .update(mentions)
           .set({
-            priceError: error instanceof Error ? error.message : String(error),
+            priceError: message,
             priceAttempts: attempts,
-            priceStatus: unverifiable ? "unverifiable" : attempts >= 5 ? "unavailable" : mention.priceStatus,
+            priceStatus: unverifiable
+              ? "unverifiable"
+              : transient
+                ? mention.priceStatus
+                : attempts >= 5
+                  ? "unavailable"
+                  : mention.priceStatus,
             pricedAt: new Date(),
             updatedAt: new Date(),
           })

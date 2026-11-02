@@ -414,12 +414,19 @@ export async function onchainSeries(input: {
   const nativeUsdPair = input.net === "ethereum" ? WETH_USDC_PAIR : WPLS_USDC_PAIR
   const factories = input.net === "ethereum" ? [UNISWAP_V2_FACTORY] : PULSEX_FACTORIES
   const stables = input.net === "ethereum" ? [...ETH_STABLES] : [...PULSE_STABLES]
-  let pair = input.pair?.toLowerCase() ?? null
-  if (pair) {
-    const meta = (await pairMeta([pair])).get(pair)
-    if (!meta || (meta.token0 !== token && meta.token1 !== token)) pair = null
+  // Always discover the token's own pair against the factories we can actually read reserves from
+  // first. The caller's `input.pair` usually comes from DexScreener/GeckoTerminal's deepest-liquidity
+  // listing, which is sometimes a concentrated-liquidity pool on a different PulseChain DEX (or an
+  // exotic quote token) — getReserves() reverts on those, so every sample silently comes back empty.
+  // The caller's pair is only a fallback for a token that genuinely has no classic AMM pool at all.
+  let pair = await findPairs(token, [native, ...stables], factories)
+  if (!pair) {
+    const fallback = input.pair?.toLowerCase() ?? null
+    if (fallback) {
+      const meta = (await pairMeta([fallback])).get(fallback)
+      if (meta && (meta.token0 === token || meta.token1 === token)) pair = fallback
+    }
   }
-  if (!pair) pair = await findPairs(token, [native, ...stables], factories)
   if (!pair) throw new OnchainUnverifiable(`No ${input.net === "ethereum" ? "Uniswap V2" : "PulseX"} pair for this token. Not estimated.`)
   const meta = (await pairMeta([pair, nativeUsdPair])).get(pair)
   const nativeMeta = pairMetaCache.get(nativeUsdPair) ?? null

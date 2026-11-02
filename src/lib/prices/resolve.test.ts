@@ -75,6 +75,46 @@ describe("resolveEvmContract (PulseChain tickers only)", () => {
     expect(asset.pairAddress).toBeNull()
   })
 
+  it("prefers a classic PulseX pair over a deeper non-PulseX pair — the latter may not expose getReserves()", () => {
+    const asset = resolveEvmContract(PLSX, [
+      {
+        chainId: "pulsechain",
+        dexId: "liberty-swap",
+        pairAddress: "0x1111111111111111111111111111111111111111",
+        baseToken: { address: PLSX, symbol: "PLSX", name: "PulseX" },
+        liquidity: { usd: 500_000 },
+      },
+      {
+        chainId: "pulsechain",
+        dexId: "pulsex",
+        pairAddress: "0x2222222222222222222222222222222222222222",
+        baseToken: { address: PLSX, symbol: "PLSX", name: "PulseX" },
+        liquidity: { usd: 40_000 },
+      },
+    ])
+    expect(asset.pairAddress).toBe("0x2222222222222222222222222222222222222222")
+  })
+
+  it("falls back to the deepest pair when none of them is PulseX", () => {
+    const asset = resolveEvmContract(PLSX, [
+      {
+        chainId: "pulsechain",
+        dexId: "9mm",
+        pairAddress: "0x3333333333333333333333333333333333333333",
+        baseToken: { address: PLSX, symbol: "PLSX", name: "PulseX" },
+        liquidity: { usd: 10_000 },
+      },
+      {
+        chainId: "pulsechain",
+        dexId: "liberty-swap",
+        pairAddress: "0x4444444444444444444444444444444444444444",
+        baseToken: { address: PLSX, symbol: "PLSX", name: "PulseX" },
+        liquidity: { usd: 50_000 },
+      },
+    ])
+    expect(asset.pairAddress).toBe("0x4444444444444444444444444444444444444444")
+  })
+
   it("accepts a GeckoTerminal pulsechain pool id mapped onto the pair", () => {
     const asset = resolveEvmContract(PLSX, [
       {

@@ -6,7 +6,7 @@ import { applyAssetState, downsample, evaluateCall, type Candle } from "../scori
 import { PULSE_FORK_MS } from "../detect/context"
 import { onchainSeries, sampleTimes, type OnchainNet } from "./onchain"
 import { cachedDays, dayStart, firstGap, loadCandles, storeDays, windowDays } from "./candles"
-import { fetchHistory, isUnverifiable } from "./history"
+import { fetchHistory, isUnverifiable, TRANSIENT } from "./history"
 
 const DAY = 24 * 60 * 60 * 1000
 const HOUR = 60 * 60 * 1000
@@ -352,17 +352,19 @@ export async function priceFromCache(options: {
     const notReady = group.filter((row) => !readyIds.has(row.id))
     if (notReady.length) {
       count("apiNotReady", notReady.length)
-      // A gap that is still missing after this pass must not keep winning "order by price_attempts asc,
-      // created_at asc" forever: record the attempt so the row rotates behind fresher pending rows, and
-      // give up with a reason once it has had a fair number of passes (same threshold as the write failure below).
+      const errorMessage = lastError ?? "Ran out of budget before enough price history was cached this pass."
+      // A rate limit, timeout, or a pass that simply ran out of budget is not proof the price is
+      // unavailable — it must not burn an attempt toward "unavailable", or a noisy host (or a slow
+      // pass) permanently locks out a row that would have priced fine on the next try.
+      const transient = TRANSIENT.test(errorMessage)
       for (const row of notReady) {
-        const attempts = row.priceAttempts + 1
+        const attempts = transient ? row.priceAttempts : row.priceAttempts + 1
         await db
           .update(mentions)
           .set({
-            priceError: lastError ?? "Ran out of budget before enough price history was cached this pass.",
+            priceError: errorMessage,
             priceAttempts: attempts,
-            priceStatus: attemptStatus(attempts, row.priceStatus),
+            priceStatus: transient ? row.priceStatus : attemptStatus(attempts, row.priceStatus),
             updatedAt: new Date(),
           })
           .where(eq(mentions.id, row.id))

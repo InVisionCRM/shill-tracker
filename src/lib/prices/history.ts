@@ -119,7 +119,7 @@ export async function fetchHistory(
   throw new Error(errors.join(" | ") || "no price source for this asset")
 }
 
-const TRANSIENT = /\b429\b|cooldown|abort|timeout|timed out|\b5\d\d\b/i
+export const TRANSIENT = /\b429\b|cooldown|abort|timeout|timed out|\b5\d\d\b|ran out of budget/i
 
 async function binanceKlines(symbol: string, fromMs: number, toMs: number) {
   const candles: Candle[] = []
