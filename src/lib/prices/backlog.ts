@@ -11,6 +11,14 @@ import { fetchHistory, isUnverifiable } from "./history"
 const DAY = 24 * 60 * 60 * 1000
 const HOUR = 60 * 60 * 1000
 
+/** Once a row has failed this many passes without getting a price, it stops crowding the queue. */
+const MAX_ATTEMPTS_BEFORE_GIVING_UP = 3
+
+/** The status a row should carry after another failed attempt: give up with a reason past the limit. */
+export function attemptStatus(attempts: number, current: string) {
+  return attempts >= MAX_ATTEMPTS_BEFORE_GIVING_UP ? "unavailable" : current
+}
+
 type Row = {
   id: string
   influencerId: string
@@ -293,6 +301,7 @@ export async function priceFromCache(options: {
     for (const row of group) for (const day of windowDays(row.createdAt.getTime())) needed.add(day)
     const have = await cachedDays(assetKey, [...needed])
     let source: string | null = null
+    let lastError: string | null = null
     for (let pass = 0; pass < 6 && !overBudget(); pass += 1) {
       const missing = [...needed].filter((day) => !have.has(day))
       const gap = firstGap(missing, 40)
@@ -323,6 +332,7 @@ export async function priceFromCache(options: {
         stats.fetches += 1
         stats.failed += 1
         const message = noteError(error)
+        lastError = message
         if (isUnverifiable(error)) {
           // Only the calls whose window falls in this gap are unverifiable, not the whole asset.
           const gapSet = new Set(gap)
@@ -335,11 +345,30 @@ export async function priceFromCache(options: {
         break
       }
     }
-    const ready = group.filter((row) => windowDays(row.createdAt.getTime()).every((day) => have.has(day)))
-    if (!ready.length) {
-      count("apiNotReady", group.length)
-      return
+    const readyIds = new Set(
+      group.filter((row) => windowDays(row.createdAt.getTime()).every((day) => have.has(day))).map((row) => row.id),
+    )
+    const ready = group.filter((row) => readyIds.has(row.id))
+    const notReady = group.filter((row) => !readyIds.has(row.id))
+    if (notReady.length) {
+      count("apiNotReady", notReady.length)
+      // A gap that is still missing after this pass must not keep winning "order by price_attempts asc,
+      // created_at asc" forever: record the attempt so the row rotates behind fresher pending rows, and
+      // give up with a reason once it has had a fair number of passes (same threshold as the write failure below).
+      for (const row of notReady) {
+        const attempts = row.priceAttempts + 1
+        await db
+          .update(mentions)
+          .set({
+            priceError: lastError ?? "Ran out of budget before enough price history was cached this pass.",
+            priceAttempts: attempts,
+            priceStatus: attemptStatus(attempts, row.priceStatus),
+            updatedAt: new Date(),
+          })
+          .where(eq(mentions.id, row.id))
+      }
     }
+    if (!ready.length) return
     const candles = await loadCandles(assetKey, [...have])
     if (!source) {
       const [stored] = await db
@@ -365,7 +394,7 @@ export async function priceFromCache(options: {
             priceError: slice.length < 2 ? `cached window has ${slice.length} candles` : "no candle within 36h of the post",
             priceAttempts: attempts,
             // A cache gap is not proof that no data exists, so this never marks unverifiable.
-            priceStatus: attempts >= 3 ? "unavailable" : row.priceStatus,
+            priceStatus: attemptStatus(attempts, row.priceStatus),
             updatedAt: new Date(),
           })
           .where(eq(mentions.id, row.id))

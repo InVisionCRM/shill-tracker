@@ -466,23 +466,19 @@ export async function runPriceJob(options?: {
     summary.durationMs = Date.now() - started.getTime()
     detail.summary = summary
     console.log(`price-run ${JSON.stringify(summary)}`)
-    await db.insert(cronRuns).values({
-      job: "prices",
-      startedAt: started,
-      finishedAt: new Date(),
-      ok: true,
-      detail,
-    })
+    // A hiccup writing the bookkeeping row must not turn an otherwise-successful pricing run into a
+    // thrown error (the admin health dashboard would rather miss one log line than report ok:false here).
+    await db
+      .insert(cronRuns)
+      .values({ job: "prices", startedAt: started, finishedAt: new Date(), ok: true, detail })
+      .catch((error) => console.error(`cron_runs insert failed: ${describeError(error)}`))
     return { ok: true, ...detail }
   } catch (error) {
     const message = describeError(error)
-    await db.insert(cronRuns).values({
-      job: "prices",
-      startedAt: started,
-      finishedAt: new Date(),
-      ok: false,
-      detail: { ...detail, error: message },
-    })
+    await db
+      .insert(cronRuns)
+      .values({ job: "prices", startedAt: started, finishedAt: new Date(), ok: false, detail: { ...detail, error: message } })
+      .catch((insertError) => console.error(`cron_runs insert failed: ${describeError(insertError)}`))
     throw error
   }
 }

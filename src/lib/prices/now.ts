@@ -13,6 +13,8 @@ type Token = {
   pair: string | null
   binance: string | null
   coingecko: string | null
+  /** No live quote will ever come for this one; price_now is the terminal -100%, not an API lookup. */
+  dead: boolean
 }
 
 export type NowSummary = {
@@ -55,24 +57,38 @@ export async function nowTokens(limit: number): Promise<Token[]> {
       max(lower(pair_address)) as pair,
       max(binance_symbol) as binance,
       max(coingecko_id) as coingecko,
+      bool_or(asset_state in ('dead', 'rugged')) as dead,
       bool_or(price_now is null) as missing
     from mentions
     where id in (${firstMentionIds})
       and pinned = false
       and asset_key is not null
+      -- A row with no price at the shill has nothing for price_now's ROI to divide by, and most of these
+      -- are never-resolved placeholders (assetKeyOf falls back to "sym:TICKER") that no API can ever
+      -- answer. Without this filter they never leave the "missing" pool and crowd out real tokens.
+      and price_at is not null
     group by asset_key
     having bool_or(price_now is null)
       or max(updated_at) < now() - (${STALE_MINUTES} * interval '1 minute')
     order by bool_or(price_now is null) desc, random()
     limit ${limit}
   `)
-  return resultRows<{ asset_key: string; chain: string | null; contract: string | null; pair: string | null; binance: string | null; coingecko: string | null }>(result).map((row) => ({
+  return resultRows<{
+    asset_key: string
+    chain: string | null
+    contract: string | null
+    pair: string | null
+    binance: string | null
+    coingecko: string | null
+    dead: boolean
+  }>(result).map((row) => ({
     assetKey: row.asset_key,
     chain: row.chain,
     contract: row.contract,
     pair: row.pair,
     binance: row.binance,
     coingecko: row.coingecko,
+    dead: Boolean(row.dead),
   }))
 }
 
@@ -191,11 +207,23 @@ export async function writeNowPrices(prices: Map<string, { price: number; liquid
   return updated
 }
 
+/**
+ * Dead/rugged tokens have no live quote coming: DexScreener, PulseX reserves, Binance and CoinGecko
+ * will never answer for them, so they would sit in "missing" forever otherwise. They split off here
+ * instead of making any API call for them.
+ */
+export function splitDeadTokens(tokens: Token[]) {
+  return { dead: tokens.filter((token) => token.dead), alive: tokens.filter((token) => !token.dead) }
+}
+
 export async function refreshNowPrices(options?: { budgetMs?: number; limit?: number }): Promise<NowSummary> {
   const started = Date.now()
   const deadline = started + (options?.budgetMs ?? 40_000)
   const tokens = await nowTokens(options?.limit ?? 600)
-  const prices = await fetchNowPrices(tokens, deadline - 3_000)
+  // Their price_now is the same -100%-from-entry call evaluateCall already makes for the price-at-shill side.
+  const { dead, alive } = splitDeadTokens(tokens)
+  const prices = await fetchNowPrices(alive, deadline - 3_000)
+  for (const token of dead) prices.set(token.assetKey, { price: 0, source: "dead", liquidity: null })
   const rowsUpdated = await writeNowPrices(prices)
   const bySource: Record<string, number> = {}
   for (const row of prices.values()) bySource[row.source] = (bySource[row.source] ?? 0) + 1

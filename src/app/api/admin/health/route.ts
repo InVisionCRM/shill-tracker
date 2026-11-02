@@ -51,12 +51,18 @@ export async function GET(request: Request) {
       group by 1, 2
     `),
   )
-  const pricing = { pending_resolution: 0, pending_price: 0, priced: 0, partial: 0, unverifiable: 0, unavailable: 0, dead: 0 }
+  // "priced" means a row has a price at the shill (price_status ready or partial both imply price_at is
+  // set; only the settled horizons differ). ready/partial stay broken out underneath for diagnosis.
+  const pricing = { pending_resolution: 0, pending_price: 0, priced: 0, ready: 0, partial: 0, unverifiable: 0, unavailable: 0, dead: 0 }
   for (const row of queue) {
     const n = Number(row.n)
-    if (row.price_status === "ready") pricing.priced += n
-    else if (row.price_status === "partial") pricing.partial += n
-    else if (row.price_status === "unverifiable") pricing.unverifiable += n
+    if (row.price_status === "ready") {
+      pricing.priced += n
+      pricing.ready += n
+    } else if (row.price_status === "partial") {
+      pricing.priced += n
+      pricing.partial += n
+    } else if (row.price_status === "unverifiable") pricing.unverifiable += n
     else if (row.price_status === "unavailable") pricing.unavailable += n
     else if (row.resolution_status === "pending") pricing.pending_resolution += n
     else pricing.pending_price += n
