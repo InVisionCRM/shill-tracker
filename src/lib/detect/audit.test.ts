@@ -220,7 +220,7 @@ describe("hodldog: hashtags and name-cashtags never become tickers", () => {
   })
 
   it("raw hashtag extraction still happens (for curated overrides), but identifyFast always rejects a bare hashtag", () => {
-    const [match] = extractMatches("#STFU is trending")
+    const [match] = extractMatches("#Zorblax is trending")
     expect(match.matchType).toBe("hashtag")
     const resolved = identifyFast(match)
     expect(resolved.resolutionStatus).toBe("rejected")
