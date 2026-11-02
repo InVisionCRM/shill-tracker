@@ -6,6 +6,7 @@ import { binanceEntry } from "./history"
 import { fetchJson } from "./http"
 import { onchainSeries } from "./onchain"
 import { recomputeInfluencers } from "../stats"
+import { isResting, rest } from "./backoff"
 
 /**
  * Price at the shill. GeckoTerminal's free OHLCV first: the minute candle that contains the post (its
@@ -23,6 +24,9 @@ const GT_WINDOW_MS = 179 * DAY
 /** About 30 calls a minute on the free tier. fetchJson spaces calls per host. */
 const GT_INTERVAL_MS = 2_100
 const CONCURRENCY = 4
+/** Per-run memory key for a row that just missed on a transient (rate limit/timeout) error. */
+const entryKey = (id: string) => `entry:${id}`
+const TRANSIENT_ENTRY_REST_MS = 90_000
 
 export type Entry = { price: number; ts: number; match: PriceMatch; source: string }
 
@@ -168,9 +172,12 @@ export async function fillEntries(options?: { budgetMs?: number; limit?: number 
       limit ${options?.limit ?? 300}
     `),
   )
-  const summary = { candidates: pending.length, priced: 0, none: 0, transient: 0, bySource: {} as Record<string, number>, bySourceMatch: {} as Record<string, number> }
+  // A row that just missed on a transient host failure rests briefly (see entryKey below) so this
+  // call spends its budget on other rows instead of re-hitting the same still-cooling host.
+  const active = pending.filter((row) => !isResting(entryKey(row.id)))
+  const summary = { candidates: active.length, priced: 0, none: 0, transient: 0, bySource: {} as Record<string, number>, bySourceMatch: {} as Record<string, number> }
   const touched = new Set<string>()
-  const queue = [...pending]
+  const queue = [...active]
   await Promise.all(
     Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
       while (queue.length && deadline - Date.now() > 6_000) {
@@ -210,6 +217,7 @@ export async function fillEntries(options?: { budgetMs?: number; limit?: number 
             update mentions set price_error = ${(error instanceof Error ? error.message : String(error)).slice(0, 300)}, updated_at = now()
             where id = ${row.id}
           `)
+          rest(entryKey(row.id), TRANSIENT_ENTRY_REST_MS)
         }
       }
     }),

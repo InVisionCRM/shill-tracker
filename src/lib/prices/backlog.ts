@@ -7,6 +7,7 @@ import { PULSE_FORK_MS } from "../detect/context"
 import { onchainSeries, sampleTimes, type OnchainNet } from "./onchain"
 import { cachedDays, dayStart, firstGap, loadCandles, storeDays, windowDays } from "./candles"
 import { fetchHistory, isUnverifiable, TRANSIENT } from "./history"
+import { isResting, rest } from "./backoff"
 
 const DAY = 24 * 60 * 60 * 1000
 const HOUR = 60 * 60 * 1000
@@ -18,6 +19,23 @@ const MAX_ATTEMPTS_BEFORE_GIVING_UP = 3
 export function attemptStatus(attempts: number, current: string) {
   return attempts >= MAX_ATTEMPTS_BEFORE_GIVING_UP ? "unavailable" : current
 }
+
+/**
+ * A row that has a real price_at but still has some due window (1h/24h/7d/30d) missing stays
+ * "partial" so the next pass retries it. Once it has genuinely been re-evaluated this many times
+ * and the gap is still there, the data for that window plainly does not exist (the window is not
+ * estimated either way) — settle as "ready" instead of refreshing forever on the same dead end.
+ */
+export function partialStatus(attempts: number, status: string) {
+  return status === "partial" && attempts >= MAX_ATTEMPTS_BEFORE_GIVING_UP ? "ready" : status
+}
+
+/** Per-run memory key for an asset's on-chain reserve lookup; shared with the API fallback skip. */
+const onchainKey = (assetKey: string) => `onchain:${assetKey}`
+/** Per-run memory key for a single row's API fetch, after a transient (rate limit/timeout) miss. */
+const rowKey = (id: string) => `row:${id}`
+const ONCHAIN_NOMATCH_REST_MS = 15 * 60_000
+const TRANSIENT_ROW_REST_MS = 90_000
 
 type Row = {
   id: string
@@ -85,10 +103,18 @@ export async function priceFromCache(options: {
       )
       and (
         m.price_status in ('pending', 'partial')
-        or (m.price_1h is null and m.created_at < ${hourAgo})
-        or (m.price_24h is null and m.created_at < ${dayAgo})
-        or (m.price_7d is null and m.created_at < ${weekAgo})
-        or (m.price_30d is null and m.created_at < ${monthAgo})
+        or (
+          -- A row already settled past "partial" (see partialStatus) keeps a due window null
+          -- forever because the data for it genuinely does not exist; past the same attempts cap,
+          -- stop treating that gap as a reason to refresh it every pass.
+          m.price_attempts < ${MAX_ATTEMPTS_BEFORE_GIVING_UP}
+          and (
+            (m.price_1h is null and m.created_at < ${hourAgo})
+            or (m.price_24h is null and m.created_at < ${dayAgo})
+            or (m.price_7d is null and m.created_at < ${weekAgo})
+            or (m.price_30d is null and m.created_at < ${monthAgo})
+          )
+        )
       )
       and not (m.price_status = 'unavailable' and m.price_attempts >= 5)
       and r.call_rank = 1
@@ -127,8 +153,11 @@ export async function priceFromCache(options: {
     priceStatus: row.price_status,
     callRank: Number(row.call_rank),
   }))
+  // A row that just missed on a transient host failure rests briefly (see rowKey below) so this
+  // pass spends its budget on other rows instead of re-hitting the same still-cooling host.
+  const active = rows.filter((row) => !isResting(rowKey(row.id)))
   const groups = new Map<string, Row[]>()
-  for (const row of rows) {
+  for (const row of active) {
     const list = groups.get(row.assetKey) ?? []
     list.push(row)
     groups.set(row.assetKey, list)
@@ -141,7 +170,7 @@ export async function priceFromCache(options: {
   })
 
   const stats: BacklogStats = {
-    attempted: rows.length,
+    attempted: active.length,
     assets: ordered.length,
     priced: 0,
     failed: 0,
@@ -165,6 +194,10 @@ export async function priceFromCache(options: {
       row.assetState === "dead" || row.assetState === "rugged" ? row.assetState : null,
     )
     if (evaluated.priceAt == null) return false
+    // Only a still-"partial" result burns an attempt: a clean "ready" is never capped, and a row
+    // that just became ready on this very pass should not look like it already used up retries.
+    const priceAttempts = evaluated.priceStatus === "partial" ? row.priceAttempts + 1 : row.priceAttempts
+    const priceStatus = partialStatus(priceAttempts, evaluated.priceStatus)
     await db
       .update(mentions)
       .set({
@@ -197,7 +230,8 @@ export async function priceFromCache(options: {
         pumpDumpReasons: evaluated.pumpDumpReasons,
         series: downsample(slice, 220),
         assetState: row.assetState === "dead" && evaluated.priceAt != null ? "rugged" : row.assetState,
-        priceStatus: evaluated.priceStatus,
+        priceStatus,
+        priceAttempts,
         priceError: null,
         pricedAt: new Date(),
         updatedAt: new Date(),
@@ -227,23 +261,26 @@ export async function priceFromCache(options: {
 
   // 1) On-chain assets: one batched reserve read per asset covers every pending call on it.
   const apiGroups: [string, Row[]][] = []
-  const onchainQueue: { assetKey: string; net: OnchainNet; token: string; pair: string | null; rows: Row[]; rest: Row[] }[] = []
+  const onchainQueue: { assetKey: string; net: OnchainNet; token: string; pair: string | null; rows: Row[]; laterRows: Row[] }[] = []
   for (const [assetKey, group] of ordered) {
     const sample = group[0]
     const net = onchainNetOf(sample)
-    if (!net || !sample.contractAddress) {
+    // An asset whose reserves came back with no match at every sampled time this run skips the
+    // RPC round trip for a while and goes straight to the API fallback below (see runOnchain).
+    if (!net || !sample.contractAddress || isResting(onchainKey(assetKey))) {
       apiGroups.push([assetKey, group])
       continue
     }
     const eligible = group.filter((row) => net === "pulsechain" || row.createdAt.getTime() < PULSE_FORK_MS)
-    const rest = group.filter((row) => !eligible.includes(row))
-    onchainQueue.push({ assetKey, net, token: sample.contractAddress, pair: net === "pulsechain" ? sample.pairAddress : null, rows: eligible, rest })
+    const laterRows = group.filter((row) => !eligible.includes(row))
+    onchainQueue.push({ assetKey, net, token: sample.contractAddress, pair: net === "pulsechain" ? sample.pairAddress : null, rows: eligible, laterRows })
   }
 
   const runOnchain = async (job: (typeof onchainQueue)[number]) => {
-    const fallback: Row[] = [...job.rest]
+    const fallback: Row[] = [...job.laterRows]
+    let noMatch = false
     for (let start = 0; start < job.rows.length; start += 30) {
-      if (overBudget()) return fallback
+      if (overBudget()) break
       const chunk = job.rows.slice(start, start + 30)
       const times = [...new Set(chunk.flatMap((row) => sampleTimes(row.createdAt.getTime())))]
       let candles: Candle[] = []
@@ -269,9 +306,15 @@ export async function priceFromCache(options: {
         const slice = candles.filter((candle) => candle.t >= postedAt - 8 * DAY && candle.t <= Date.now() + HOUR)
         const ok = await write(row, slice, job.net === "ethereum" ? "uniswap-v2" : "pulsex")
         count(ok ? "onchainPriced" : "onchainNoMatch")
-        if (!ok) fallback.push(row)
+        if (!ok) {
+          fallback.push(row)
+          noMatch = true
+        }
       }
     }
+    // A real reserve read that still missed on every sampled time will miss again on an
+    // immediate retry (the blocks are in the past and will not change); let it rest.
+    if (noMatch) rest(onchainKey(job.assetKey), ONCHAIN_NOMATCH_REST_MS)
     return fallback
   }
 
@@ -368,6 +411,9 @@ export async function priceFromCache(options: {
             updatedAt: new Date(),
           })
           .where(eq(mentions.id, row.id))
+        // A transient miss doesn't burn an attempt, but it must not be retried an instant later
+        // either — rest it so this run's next pass spends its budget on other rows instead.
+        if (transient) rest(rowKey(row.id), TRANSIENT_ROW_REST_MS)
       }
     }
     if (!ready.length) return

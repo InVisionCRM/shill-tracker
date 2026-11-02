@@ -1,6 +1,21 @@
-const lastCall = new Map<string, number>()
+type HostState = { lastCallAt: number; cooldownUntil: number }
+const hosts = new Map<string, HostState>()
+
+/**
+ * The earliest moment `host`'s next call may fire: the later of its normal per-host spacing and any
+ * active 429 cooldown. A cooldown pushes `lastCallAt` out to its own end (see below), so the call
+ * that fires right as the cooldown clears still waits out one full interval instead of bursting
+ * straight back into the rate limit that triggered the cooldown in the first place.
+ */
+export function nextSlot(state: HostState | undefined, now: number, minIntervalMs: number) {
+  return Math.max(now, (state?.lastCallAt ?? 0) + minIntervalMs, state?.cooldownUntil ?? 0)
+}
+
 /** After repeated 429s a host rests for a while, so one run does not burn its budget on retries. */
-const cooldownUntil = new Map<string, number>()
+function enterCooldown(now: number, cooldownMs: number): HostState {
+  const until = now + cooldownMs
+  return { lastCallAt: until, cooldownUntil: until }
+}
 
 export function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -15,13 +30,13 @@ export async function fetchJson<T>(
   },
 ): Promise<T> {
   const host = new URL(url).host
-  const resting = cooldownUntil.get(host) ?? 0
-  if (resting > Date.now()) throw new Error(`429 cooldown ${host}`)
+  const now = Date.now()
+  const state = hosts.get(host)
+  if (state && now < state.cooldownUntil) throw new Error(`429 cooldown ${host}`)
   const minInterval = init?.minIntervalMs ?? 0
   // Reserve the next slot before sleeping, so concurrent callers queue instead of firing together.
-  const now = Date.now()
-  const slot = Math.max(now, (lastCall.get(host) ?? 0) + minInterval)
-  lastCall.set(host, slot)
+  const slot = nextSlot(state, now, minInterval)
+  hosts.set(host, { lastCallAt: slot, cooldownUntil: state?.cooldownUntil ?? 0 })
   if (slot > now) await sleep(slot - now)
 
   let lastError: Error | null = null
@@ -68,7 +83,7 @@ export async function fetchJson<T>(
       clearTimeout(timer)
     }
   }
-  if (lastError?.message.startsWith("429")) cooldownUntil.set(host, Date.now() + 45_000)
+  if (lastError?.message.startsWith("429")) hosts.set(host, enterCooldown(Date.now(), 45_000))
   throw lastError ?? new Error(`failed ${url}`)
 }
 
@@ -83,5 +98,5 @@ export function coingeckoConfig() {
 
 /** True while a host is in its 429 cooldown. */
 export function hostResting(host: string) {
-  return (cooldownUntil.get(host) ?? 0) > Date.now()
+  return (hosts.get(host)?.cooldownUntil ?? 0) > Date.now()
 }
