@@ -29,4 +29,14 @@ describe("entry price at the post (ROI Auditor C1)", () => {
     expect(entryAtDetail(minutes, base + 10 * MIN)).toBeNull()
     expect(entryAtDetail(minutes, base - 5 * MIN)).toBeNull()
   })
+  it("takes an on-chain point sample read just before the post (sparse sampled times)", () => {
+    // sampleTimes(): -7d, -1d, the post, +1h, +1d ... each read at the block just before that time.
+    const samples = [
+      { t: base - 24 * HOUR - 4_000, p: 0.5, v: 0 },
+      { t: base - 3 * MIN, p: 0.8, v: 0 },
+      { t: base + HOUR - 5_000, p: 0.9, v: 0 },
+      { t: base + 24 * HOUR - 2_000, p: 1.1, v: 0 },
+    ]
+    expect(entryAtDetail(samples, base)).toEqual({ p: 0.8, t: base - 3 * MIN, m: "exact" })
+  })
 })

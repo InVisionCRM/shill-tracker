@@ -149,6 +149,8 @@ export function priceAtDetail(candles: Candle[], time: number): { p: number; t: 
   return { p: candles[found].p, t: candles[found].t }
 }
 
+const POINT_SAMPLE_MS = 15 * 60 * 1000
+
 /**
  * Entry price at the post time. Candles carry their close, so the open of the candle that contains the
  * post is the previous candle's close. A post in the last sixth of its candle takes that candle's close.
@@ -170,8 +172,14 @@ export function entryAtDetail(candles: Candle[], time: number): { p: number; t: 
   }
   if (found < 0) return null
   const containing = candles[found]
-  const next = candles[found + 1]
   const prev = candles[found - 1]
+  // On-chain reserve reads are sparse point samples (the block at or just before each sampled
+  // time), not evenly spaced candles. One taken within minutes before the post is the price at the
+  // post; the candle open/close logic below would wrongly reject it for the irregular spacing. Those
+  // reads carry no volume (v = 0) and are never hourly-aligned OHLCV, so real candles are unaffected.
+  const isPointRead = containing.v === 0 && (!prev || prev.v === 0)
+  const pointSample = isPointRead && time - containing.t <= POINT_SAMPLE_MS
+  const next = candles[found + 1]
   const spacing = next ? next.t - containing.t : prev ? containing.t - prev.t : null
   if (spacing == null || spacing <= 0) return null
   const offset = time - containing.t
@@ -179,7 +187,9 @@ export function entryAtDetail(candles: Candle[], time: number): { p: number; t: 
   if (offset >= spacing) return null
   const m: PriceMatch = spacing <= 2 * 60 * 1000 ? "exact" : spacing < 12 * 60 * 60 * 1000 ? "nearest_candle" : "nearest_daily_close"
   if (offset >= (spacing * 5) / 6) return { p: containing.p, t: containing.t + spacing, m }
-  if (!prev || containing.t - prev.t > spacing * 1.5) return null
+  if (!prev || containing.t - prev.t > spacing * 1.5) {
+    return pointSample ? { p: containing.p, t: containing.t, m: "exact" } : null
+  }
   return { p: prev.p, t: containing.t, m }
 }
 

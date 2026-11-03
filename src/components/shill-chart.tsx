@@ -76,7 +76,7 @@ export function ShillChart({ contractAddress, chain, postedAt, priceAt }: Props)
         wickUpColor: UP,
         wickDownColor: DOWN,
         borderVisible: false,
-        priceFormat: { type: "custom", minMove: min > 0 ? Math.min(0.01, min / 1000) : 0.01, formatter: (p: number) => formatUsd(p) },
+        priceFormat: { type: "custom", base: priceBase(min), minMove: 1 / priceBase(min), formatter: (p: number) => formatUsd(p) },
       })
       series.setData(candles.map((c) => ({ ...c, time: c.time as never })))
       const shillBar = barTime(postedMs, tf)
@@ -116,4 +116,11 @@ export function ShillChart({ contractAddress, chain, postedAt, priceAt }: Props)
       ) : null}
     </div>
   )
+}
+
+/** lightweight-charts needs a power-of-10 price base ("unexpected base" otherwise); ~3 significant digits. */
+export function priceBase(min: number) {
+  if (!(min > 0) || !Number.isFinite(min)) return 100
+  const decimals = Math.min(20, Math.max(2, 3 - Math.floor(Math.log10(min))))
+  return 10 ** decimals
 }

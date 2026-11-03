@@ -1,6 +1,6 @@
 /**
  * Candles for the call charts: real PulseX pool OHLCV from GeckoTerminal's free API, with the pool found on
- * DexScreener. GeckoTerminal only serves about the last 180 days. Nothing is ever filled in or estimated.
+ * DexScreener or GeckoTerminal's own pool list. GeckoTerminal only serves about the last 180 days. Nothing is ever filled in or estimated.
  */
 export type ChartTimeframe = "day" | "hour"
 export type ChartCandle = { time: number; open: number; high: number; low: number; close: number }
@@ -23,9 +23,10 @@ export function barTime(postedAtMs: number, timeframe: ChartTimeframe) {
 }
 
 type DexPair = { pairAddress?: string; dexId?: string; liquidity?: { usd?: number } }
+type GeckoPool = { id?: string; attributes?: { address?: string; reserve_in_usd?: string } }
 
-/** PulseX pools for a token, deepest first. GeckoTerminal only indexes PulseX pools on PulseChain. */
-async function pulsexPools(token: string) {
+/** PulseX pools for a token on DexScreener, deepest first. */
+async function dexscreenerPools(token: string) {
   const response = await fetch(`https://api.dexscreener.com/token-pairs/v1/pulsechain/${token}`, { cache: "no-store" })
   if (!response.ok) throw new Error(`DexScreener ${response.status}`)
   const pairs = (await response.json()) as DexPair[]
@@ -33,6 +34,60 @@ async function pulsexPools(token: string) {
     .filter((pair) => pair.pairAddress && (pair.dexId ?? "").startsWith("pulsex"))
     .sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))
     .map((pair) => pair.pairAddress!.toLowerCase())
+}
+
+/** The token's pools as GeckoTerminal itself lists them (deepest first); DexScreener misses many small tokens. */
+async function geckoPools(token: string) {
+  const response = await fetch(`https://api.geckoterminal.com/api/v2/networks/pulsechain/tokens/${token}/pools?page=1`, {
+    headers: { accept: "application/json" },
+    cache: "no-store",
+  })
+  if (response.status === 404) return []
+  if (!response.ok) throw new Error(`GeckoTerminal ${response.status}`)
+  const body = (await response.json()) as { data?: GeckoPool[] }
+  return [...(body.data ?? [])]
+    .sort((a, b) => Number(b.attributes?.reserve_in_usd ?? 0) - Number(a.attributes?.reserve_in_usd ?? 0))
+    .map((pool) => pool.attributes?.address?.toLowerCase())
+    .filter((address): address is string => Boolean(address && ADDRESS.test(address)))
+}
+
+/** Pools to try, best first: the caller's known pair, DexScreener's PulseX pools, then GeckoTerminal's list. */
+export async function chartPools(token: string, known?: string | null) {
+  const out: string[] = []
+  const add = (list: string[]) => list.forEach((pool) => !out.includes(pool) && out.push(pool))
+  if (isChartToken(known)) add([known.toLowerCase()])
+  let failed = false
+  try {
+    add(await dexscreenerPools(token))
+  } catch {
+    failed = true
+  }
+  if (out.length < 2) {
+    try {
+      add(await geckoPools(token))
+    } catch {
+      failed = true
+    }
+  }
+  return { pools: out, failed }
+}
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** GeckoTerminal OHLCV for one pool; one short retry on a rate limit. */
+async function poolOhlcv(pool: string, token: string, timeframe: ChartTimeframe) {
+  const url = `https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${pool}/ohlcv/${timeframe}?aggregate=1&limit=1000&currency=usd&token=${token}`
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(url, { headers: { accept: "application/json" }, cache: "no-store" })
+    if (response.status === 429 && attempt === 0) {
+      await wait(2_500)
+      continue
+    }
+    if (!response.ok) return { candles: [] as ChartCandle[], failed: response.status !== 404 }
+    const body = (await response.json()) as { data?: { attributes?: { ohlcv_list?: unknown } } }
+    return { candles: parseOhlcv(body.data?.attributes?.ohlcv_list), failed: false }
+  }
+  return { candles: [] as ChartCandle[], failed: true }
 }
 
 export function parseOhlcv(list: unknown): ChartCandle[] {
@@ -49,22 +104,14 @@ export function parseOhlcv(list: unknown): ChartCandle[] {
  * `failed` is true when a source errored or rate-limited (anything but a clean answer or a 404 for a pool
  * GeckoTerminal does not index), so the caller can cache that miss only briefly.
  */
-export async function fetchChartCandles(token: string, timeframe: ChartTimeframe) {
+export async function fetchChartCandles(token: string, timeframe: ChartTimeframe, knownPool?: string | null) {
   const address = token.toLowerCase()
-  const pools = (await pulsexPools(address)).slice(0, 3)
-  let failed = false
-  for (const pool of pools) {
-    const response = await fetch(
-      `https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${pool}/ohlcv/${timeframe}?aggregate=1&limit=1000&currency=usd&token=${address}`,
-      { headers: { accept: "application/json" }, cache: "no-store" },
-    )
-    if (!response.ok) {
-      if (response.status !== 404) failed = true
-      continue
-    }
-    const body = (await response.json()) as { data?: { attributes?: { ohlcv_list?: unknown } } }
-    const candles = parseOhlcv(body.data?.attributes?.ohlcv_list)
-    if (candles.length) return { pool, candles, failed: false }
+  const found = await chartPools(address, knownPool)
+  let failed = found.failed
+  for (const pool of found.pools.slice(0, 3)) {
+    const result = await poolOhlcv(pool, address, timeframe)
+    if (result.candles.length) return { pool, candles: result.candles, failed: false }
+    if (result.failed) failed = true
   }
   return { pool: null, candles: [] as ChartCandle[], failed }
 }
