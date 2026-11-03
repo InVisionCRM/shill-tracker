@@ -41,17 +41,31 @@ export function formatCallDate(value: Date | string | number | null | undefined)
   return `${day} · ${time} UTC`
 }
 
+const SUBSCRIPT = "₀₁₂₃₄₅₆₇₈₉"
+
+/**
+ * USD price with real digits at any size: 2 decimals from $1 up, 4 significant digits below $1
+ * ($0.1234, $0.00001234), and from 5 leading zeros a compact count ($0.0₁₀3591 = $0.00000000003591).
+ */
 export function formatUsd(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "—"
+  if (value === 0) return "$0"
   const abs = Math.abs(value)
-  const digits =
-    abs >= 1000 ? 2 : abs >= 1 ? 2 : abs >= 0.01 ? 4 : abs >= 0.0001 ? 6 : 8
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: Math.min(2, digits),
-    maximumFractionDigits: digits,
-  }).format(value)
+  const sign = value < 0 ? "-" : ""
+  if (abs >= 1) {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
+  }
+  const zeros = -Math.floor(Math.log10(abs)) - 1
+  const rounded = Number(abs.toPrecision(4))
+  if (rounded >= 1) return `${sign}$1.00`
+  const digits = rounded.toFixed(Math.min(100, zeros + 6)).slice(2).replace(/0+$/, "")
+  const lead = digits.length - digits.replace(/^0+/, "").length
+  const significant = digits.slice(lead)
+  if (lead >= 5) {
+    const count = String(lead).split("").map((digit) => SUBSCRIPT[Number(digit)]).join("")
+    return `${sign}$0.0${count}${significant}`
+  }
+  return `${sign}$0.${digits}`
 }
 
 export function formatRoi(value: number | null | undefined, digits = 1) {
