@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { formatUsd } from "@/lib/format"
-import { barTime, chartTimeframe, isChartToken, type ChartCandle } from "@/lib/prices/chart-candles"
+import { barTime, chartTimeframe, fetchChartCandles, isChartToken, type ChartCandle, type ChartTimeframe } from "@/lib/prices/chart-candles"
 
 type Props = {
   contractAddress: string | null | undefined
@@ -12,6 +12,34 @@ type Props = {
 }
 
 const UP = "#3ddc97"
+
+// GeckoTerminal's free API allows ~30 calls a minute per IP and often refuses the server's shared IPs.
+// When the server comes back empty, the browser asks GeckoTerminal itself (CORS is open), one token at a
+// time so a long page stays under that limit.
+let browserQueue: Promise<unknown> = Promise.resolve()
+// A token the browser already found no candles for this session is not asked again.
+function knownEmpty(key: string) {
+  try {
+    return sessionStorage.getItem(key) === "1"
+  } catch {
+    return false
+  }
+}
+function candlesFromBrowser(token: string, tf: ChartTimeframe) {
+  const key = `chart-empty:${tf}:${token}`
+  if (knownEmpty(key)) return Promise.resolve(null)
+  const run = browserQueue.then(async () => {
+    const result = await fetchChartCandles(token, tf).catch(() => null)
+    if (result && !result.failed && !result.candles.length) {
+      try {
+        sessionStorage.setItem(key, "1")
+      } catch {}
+    }
+    return result
+  })
+  browserQueue = run.then(() => new Promise((resolve) => setTimeout(resolve, 2_200)))
+  return run
+}
 const DOWN = "#ff5c6c"
 
 /**
@@ -49,9 +77,12 @@ export function ShillChart({ contractAddress, chain, postedAt, priceAt }: Props)
     let cleanup: (() => void) | undefined
     const tf = chartTimeframe(postedMs)
     ;(async () => {
-      const response = await fetch(`/api/candles?token=${contractAddress.toLowerCase()}&tf=${tf}`)
-      const body = response.ok ? ((await response.json()) as { candles?: ChartCandle[] }) : {}
-      const candles = body.candles ?? []
+      const token = contractAddress.toLowerCase()
+      const response = await fetch(`/api/candles?token=${token}&tf=${tf}`).catch(() => null)
+      const body = response?.ok ? ((await response.json().catch(() => ({}))) as { candles?: ChartCandle[] }) : {}
+      let candles = body.candles ?? []
+      if (cancelled) return
+      if (!candles.length) candles = (await candlesFromBrowser(token, tf))?.candles ?? []
       if (cancelled) return
       if (!candles.length) {
         setState("empty")
