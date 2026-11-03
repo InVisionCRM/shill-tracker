@@ -319,12 +319,17 @@ export async function priceFromCache(options: {
   }
 
   const onchainFallback: Row[] = []
+  // Rows whose on-chain read errored or came back empty this pass (an RPC batch under load returns
+  // nulls). The API's "free history does not cover this date" is no proof for them: they keep their
+  // attempts counter instead, so a later pass retries on-chain and gives up only after the cap.
+  const onchainMissed = new Set<string>()
   for (let index = 0; index < onchainQueue.length; index += ONCHAIN_CONCURRENCY) {
     if (overBudget()) break
     const batch = onchainQueue.slice(index, index + ONCHAIN_CONCURRENCY)
     stats.onchainAssets += batch.length
     const results = await Promise.all(batch.map((job) => runOnchain(job)))
     results.forEach((rowsLeft, offset) => {
+      for (const row of rowsLeft) if (!batch[offset].laterRows.includes(row)) onchainMissed.add(row.id)
       if (rowsLeft.length) onchainFallback.push(...rowsLeft.map((row) => ({ ...row, assetKey: batch[offset].assetKey })))
     })
   }
@@ -379,7 +384,9 @@ export async function priceFromCache(options: {
         if (isUnverifiable(error)) {
           // Only the calls whose window falls in this gap are unverifiable, not the whole asset.
           const gapSet = new Set(gap)
-          const hit = group.filter((row) => windowDays(row.createdAt.getTime()).some((day) => gapSet.has(day)))
+          const hit = group.filter(
+            (row) => windowDays(row.createdAt.getTime()).some((day) => gapSet.has(day)) && !onchainMissed.has(row.id),
+          )
           await markUnverifiable(hit.map((row) => row.id), message)
           for (const day of gap) needed.delete(day)
           for (const row of hit) group.splice(group.indexOf(row), 1)
