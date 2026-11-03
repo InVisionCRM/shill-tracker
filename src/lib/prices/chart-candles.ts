@@ -25,11 +25,9 @@ export function barTime(postedAtMs: number, timeframe: ChartTimeframe) {
 type DexPair = { pairAddress?: string; dexId?: string; liquidity?: { usd?: number } }
 
 /** PulseX pools for a token, deepest first. GeckoTerminal only indexes PulseX pools on PulseChain. */
-async function pulsexPools(token: string, revalidate: number) {
-  const response = await fetch(`https://api.dexscreener.com/token-pairs/v1/pulsechain/${token}`, {
-    next: { revalidate },
-  })
-  if (!response.ok) return []
+async function pulsexPools(token: string) {
+  const response = await fetch(`https://api.dexscreener.com/token-pairs/v1/pulsechain/${token}`, { cache: "no-store" })
+  if (!response.ok) throw new Error(`DexScreener ${response.status}`)
   const pairs = (await response.json()) as DexPair[]
   return (Array.isArray(pairs) ? pairs : [])
     .filter((pair) => pair.pairAddress && (pair.dexId ?? "").startsWith("pulsex"))
@@ -47,18 +45,26 @@ export function parseOhlcv(list: unknown): ChartCandle[] {
   return candles.filter((candle, index) => index === 0 || candle.time !== candles[index - 1].time)
 }
 
-export async function fetchChartCandles(token: string, timeframe: ChartTimeframe, revalidate: number) {
+/**
+ * `failed` is true when a source errored or rate-limited (anything but a clean answer or a 404 for a pool
+ * GeckoTerminal does not index), so the caller can cache that miss only briefly.
+ */
+export async function fetchChartCandles(token: string, timeframe: ChartTimeframe) {
   const address = token.toLowerCase()
-  const pools = (await pulsexPools(address, revalidate)).slice(0, 2)
+  const pools = (await pulsexPools(address)).slice(0, 3)
+  let failed = false
   for (const pool of pools) {
     const response = await fetch(
       `https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${pool}/ohlcv/${timeframe}?aggregate=1&limit=1000&currency=usd&token=${address}`,
-      { headers: { accept: "application/json" }, next: { revalidate } },
+      { headers: { accept: "application/json" }, cache: "no-store" },
     )
-    if (!response.ok) continue
+    if (!response.ok) {
+      if (response.status !== 404) failed = true
+      continue
+    }
     const body = (await response.json()) as { data?: { attributes?: { ohlcv_list?: unknown } } }
     const candles = parseOhlcv(body.data?.attributes?.ohlcv_list)
-    if (candles.length) return { pool, candles }
+    if (candles.length) return { pool, candles, failed: false }
   }
-  return { pool: null, candles: [] as ChartCandle[] }
+  return { pool: null, candles: [] as ChartCandle[], failed }
 }

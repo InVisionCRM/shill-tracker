@@ -11,11 +11,11 @@ export async function GET(request: Request) {
   if (!isChartToken(token)) return Response.json({ error: "token must be a 0x address" }, { status: 400 })
   const maxAge = tf === "hour" ? 1800 : 21600
   try {
-    const result = await fetchChartCandles(token, tf, maxAge)
-    return Response.json(result, {
-      headers: { "Cache-Control": `public, s-maxage=${maxAge}, stale-while-revalidate=86400` },
-    })
+    const { pool, candles, failed } = await fetchChartCandles(token, tf)
+    // A rate-limited or failed source is retried soon; a clean answer (candles, or truly none) is kept longer.
+    const cache = failed ? "public, s-maxage=60" : `public, s-maxage=${maxAge}, stale-while-revalidate=86400`
+    return Response.json({ pool, candles }, { headers: { "Cache-Control": cache } })
   } catch {
-    return Response.json({ pool: null, candles: [] }, { headers: { "Cache-Control": "public, s-maxage=300" } })
+    return Response.json({ pool: null, candles: [] }, { headers: { "Cache-Control": "public, s-maxage=60" } })
   }
 }
