@@ -251,17 +251,20 @@ export async function getInfluencer(username: string) {
     select
       id, symbol, asset_name, asset_key, chain, created_at, price_at,
       roi_1h, roi_24h, roi_7d, roi_30d, roi_now,
-      pump_dump_flag, pinned, price_source, price_now, price_match, price_at_ts
+      pump_dump_flag, pinned, price_source, price_now, price_match, price_at_ts,
+      contract_address, post_text
     from (
       select
-        id, symbol, asset_name, asset_key, chain, created_at, price_at,
-        roi_1h, roi_24h, roi_7d, roi_30d, roi_now,
-        pump_dump_flag, pinned, price_source, price_now, price_match, price_at_ts
-      from mentions
-      where influencer_id = ${influencer.id}
-        and id in (${firstMentionIds})
-        and resolution_status not in ('unresolved', 'rejected')
-        and price_status is distinct from 'unverifiable'
+        m.id, m.symbol, m.asset_name, m.asset_key, m.chain, m.created_at, m.price_at,
+        m.roi_1h, m.roi_24h, m.roi_7d, m.roi_30d, m.roi_now,
+        m.pump_dump_flag, m.pinned, m.price_source, m.price_now, m.price_match, m.price_at_ts,
+        m.contract_address, p.text as post_text
+      from mentions m
+      join posts p on p.id = m.post_id
+      where m.influencer_id = ${influencer.id}
+        and m.id in (${firstMentionIds})
+        and m.resolution_status not in ('unresolved', 'rejected')
+        and m.price_status is distinct from 'unverifiable'
     ) firsts
     order by created_at desc
   `)
@@ -297,6 +300,8 @@ type FirstCallRow = {
   price_now: number | null
   price_match: string | null
   price_at_ts: Date | string | null
+  contract_address: string | null
+  post_text: string | null
 }
 
 function mapFirstCall(row: FirstCallRow) {
@@ -320,6 +325,8 @@ function mapFirstCall(row: FirstCallRow) {
     priceNow: num(row.price_now),
     priceMatch: row.price_match,
     priceAtTs: row.price_at_ts == null ? null : row.price_at_ts instanceof Date ? row.price_at_ts : new Date(row.price_at_ts),
+    contractAddress: row.contract_address,
+    postText: row.post_text,
   }
 }
 
@@ -530,6 +537,8 @@ export async function getFeed(limit = 40) {
       assetName: mentions.assetName,
       assetKey: mentions.assetKey,
       rawText: mentions.rawText,
+      chain: mentions.chain,
+      contractAddress: mentions.contractAddress,
       matchType: mentions.matchType,
       confidence: mentions.confidence,
       callKind: mentions.callKind,

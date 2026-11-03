@@ -5,6 +5,8 @@ type FeedRow = {
   symbol: string | null
   assetName: string | null
   assetKey: string | null
+  chain?: string | null
+  contractAddress?: string | null
   rawText: string
   matchType: string
   confidence: string

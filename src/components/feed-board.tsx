@@ -1,5 +1,6 @@
 "use client"
 
+import { ShillChart } from "@/components/shill-chart"
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { Outcome } from "@/components/outcome"
@@ -72,6 +73,7 @@ export function FeedBoard({ initial, live = true }: { initial: FeedDTO[]; live?:
                   />
                 </div>
                 <p className="mt-2 line-clamp-3 text-sm leading-6">{item.text}</p>
+                <ShillChart contractAddress={item.contractAddress} chain={item.chain} postedAt={item.createdAt} priceAt={item.priceAt} />
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
                   {item.symbol ? (
                     <Link href={`/tickers/${item.symbol}`} className="inline-flex items-center gap-1.5 font-mono text-phosphor hover:underline">

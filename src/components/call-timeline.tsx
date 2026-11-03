@@ -4,6 +4,8 @@ import { TokenLogo } from "@/components/token-logo"
 import { formatCallDate } from "@/lib/format"
 import { Outcome } from "@/components/outcome"
 import { PriceMatchNote } from "@/components/price-match-note"
+import { PostText } from "@/components/post-text"
+import { ShillChart } from "@/components/shill-chart"
 
 export type TimelineCall = {
   id: string
@@ -18,6 +20,8 @@ export type TimelineCall = {
   roiNow: number | null
   priceNow: number | null
   pumpDumpFlag: boolean
+  contractAddress?: string | null
+  postText?: string | null
 }
 
 export function CallTimeline({
@@ -43,10 +47,10 @@ export function CallTimeline({
       </div>
       <ol className="flex flex-col gap-2">
         {calls.map((call) => (
-          <li key={call.id}>
+          <li key={call.id} className="rounded-xl border bg-card/70 px-3 py-3">
             <Link
               href={`/shills/${call.id}`}
-              className="flex items-center justify-between gap-3 rounded-xl border bg-card/70 px-3 py-3"
+              className="flex items-center justify-between gap-3"
             >
               <span className="flex min-w-0 items-center gap-2">
                 <TokenLogo
@@ -69,6 +73,12 @@ export function CallTimeline({
               </span>
               <Outcome row={call} />
             </Link>
+            {call.postText ? (
+              <div className="mt-2 text-sm leading-6">
+                <PostText text={call.postText} />
+              </div>
+            ) : null}
+            <ShillChart contractAddress={call.contractAddress} chain={call.chain} postedAt={call.createdAt} priceAt={call.priceAt} />
           </li>
         ))}
       </ol>
